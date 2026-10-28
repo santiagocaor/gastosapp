@@ -1,0 +1,13 @@
+{
+  "name": "gastos-app",
+  "version": "1.0.0",
+  "description": "GastosApp - Control de Gastos y Presupuestos basada en Stitch with Google",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["finanzas", "stitch", "presupuestos"],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+  <meta content="mobile_tab" name="shell-type"/>
+  <title>GastosApp - Control de Gastos y Presupuestos</title>
+
+  <!-- Google Fonts: Manrope, JetBrains Mono, Material Symbols Outlined -->
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "secondary": "#006c49",
+            "tertiary-container": "#004f35",
+            "surface-container": "#e5eeff",
+            "error": "#ba1a1a",
+            "on-primary-container": "#80bea6",
+            "secondary-fixed-dim": "#4edea3",
+            "outline": "#707974",
+            "outline-variant": "#bfc9c3",
+            "on-secondary": "#ffffff",
+            "tertiary-fixed-dim": "#68dba9",
+            "on-tertiary-fixed": "#002114",
+            "secondary-container": "#6cf8bb",
+            "tertiary-fixed": "#85f8c4",
+            "on-tertiary-fixed-variant": "#005137",
+            "primary-fixed-dim": "#95d3ba",
+            "surface-container-lowest": "#ffffff",
+            "tertiary": "#003623",
+            "on-secondary-container": "#00714d",
+            "on-error": "#ffffff",
+            "primary": "#003527",
+            "primary-container": "#064e3b",
+            "on-primary": "#ffffff",
+            "inverse-on-surface": "#eaf1ff",
+            "inverse-primary": "#95d3ba",
+            "error-container": "#ffdad6",
+            "on-background": "#0b1c30",
+            "surface-bright": "#f8f9ff",
+            "on-tertiary": "#ffffff",
+            "on-tertiary-container": "#51c695",
+            "surface-tint": "#2b6954",
+            "on-secondary-fixed-variant": "#005236",
+            "surface-container-low": "#eff4ff",
+            "on-error-container": "#93000a",
+            "on-primary-fixed": "#002117",
+            "on-primary-fixed-variant": "#0b513d",
+            "on-surface-variant": "#404944",
+            "background": "#f8f9ff",
+            "surface-dim": "#cbdbf5",
+            "primary-fixed": "#b0f0d6",
+            "inverse-surface": "#213145",
+            "surface": "#f8f9ff",
+            "on-secondary-fixed": "#002113",
+            "secondary-fixed": "#6ffbbe",
+            "surface-container-highest": "#d3e4fe",
+            "surface-container-high": "#dce9ff",
+            "on-surface": "#0b1c30",
+            "surface-variant": "#d3e4fe"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          spacing: {
+            "space-sm": "0.5rem",
+            "gutter-sm": "0.75rem",
+            "margin-tablet": "1.5rem",
+            "gutter": "1rem",
+            "margin-desktop": "2rem",
+            "margin": "1rem",
+            "space-md": "1rem",
+            "space-xs": "0.25rem",
+            "space-xl": "2rem",
+            "space-lg": "1.5rem",
+            "gutter-lg": "1.5rem"
+          },
+          fontFamily: {
+            "label-md": ["Manrope", "sans-serif"],
+            "display-lg": ["Manrope", "sans-serif"],
+            "label-lg": ["Manrope", "sans-serif"],
+            "data-metric": ["JetBrains Mono", "monospace"],
+            "headline-sm": ["Manrope", "sans-serif"],
+            "body-md": ["Manrope", "sans-serif"],
+            "body-sm": ["Manrope", "sans-serif"],
+            "display-lg-mobile": ["Manrope", "sans-serif"],
+            "body-lg": ["Manrope", "sans-serif"],
+            "data-sm": ["JetBrains Mono", "monospace"],
+            "headline-lg": ["Manrope", "sans-serif"],
+            "headline-md": ["Manrope", "sans-serif"]
+          },
+          fontSize: {
+            "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "500" }],
+            "display-lg": ["40px", { lineHeight: "48px", letterSpacing: "-0.03em", fontWeight: "800" }],
+            "label-lg": ["14px", { lineHeight: "20px", letterSpacing: "0.01em", fontWeight: "600" }],
+            "data-metric": ["20px", { lineHeight: "24px", letterSpacing: "-0.02em", fontWeight: "600" }],
+            "headline-sm": ["18px", { lineHeight: "24px", fontWeight: "600" }],
+            "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+            "body-sm": ["12px", { lineHeight: "16px", fontWeight: "400" }],
+            "display-lg-mobile": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "800" }],
+            "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+            "data-sm": ["12px", { lineHeight: "16px", fontWeight: "500" }],
+            "headline-lg": ["28px", { lineHeight: "36px", letterSpacing: "-0.02em", fontWeight: "700" }],
+            "headline-md": ["22px", { lineHeight: "28px", letterSpacing: "-0.01em", fontWeight: "600" }]
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+
+<body class="bg-slate-100 text-on-surface antialiased flex flex-col min-h-screen items-center justify-start select-none">
+
+  <!-- Desktop Backdrop Container (Mobile Viewport Simulator) -->
+  <div class="w-full max-w-md min-h-screen bg-surface shadow-2xl relative flex flex-col border-x border-slate-200/80">
+
+    <!-- Top Sticky Header -->
+    <header class="fixed top-0 inset-x-0 mx-auto max-w-md w-full z-50 bg-surface/85 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+      <div class="h-16 px-gutter flex items-center justify-between gap-space-sm">
+        <div class="flex items-center gap-space-xs min-w-0">
+          <button id="headerBackBtn" aria-label="Volver" class="w-10 h-10 -ml-1.5 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container-low transition-colors hidden" onclick="switchView('inicio')" type="button">
+            <span class="material-symbols-outlined text-[24px]">arrow_back</span>
+          </button>
+          <img alt="GastosApp Logo" class="h-8 w-8 object-contain shrink-0" src="assets/logo.svg"/>
+          <div class="flex flex-col truncate">
+            <span class="text-body-sm font-semibold text-secondary leading-none">GastosApp</span>
+            <h1 id="headerTitle" class="text-headline-sm font-headline-sm text-on-surface truncate">Inicio</h1>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-space-xs shrink-0">
+          <!-- Notification Bell -->
+          <button aria-label="Notificaciones" data-open-notifications class="relative w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" type="button">
+            <span class="material-symbols-outlined text-[22px]">notifications</span>
+            <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full animate-pulse-subtle"></span>
+          </button>
+
+          <!-- User Profile -->
+          <button aria-label="Perfil de usuario" class="w-10 h-10 flex items-center justify-center rounded-full hover:scale-105 transition-transform" type="button" onclick="alert('Mateo González • Plan Premium GastosApp')">
+            <img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-2 ring-secondary/30" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80"/>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area with View Panels -->
+    <main class="flex-1 flex flex-col relative w-full pt-16 pb-28 bg-surface">
+
+      <!-- ============================================== -->
+      <!-- VIEW 1: INICIO (DASHBOARD)                     -->
+      <!-- ============================================== -->
+      <section id="view-inicio" class="view-panel active px-gutter space-y-space-lg">
+        
+        <!-- Dynamic Greeting & Month Switcher -->
+        <div class="flex items-center justify-between pt-space-xs">
+          <div class="flex flex-col min-w-0">
+            <span class="text-body-sm text-secondary font-semibold">¡Hola de nuevo, Mateo! 👋</span>
+            <p class="text-headline-sm text-on-surface truncate">Tu resumen financiero</p>
+          </div>
+          <div class="flex items-center bg-surface-container-low px-space-xs py-1 rounded-full shadow-xs">
+            <button aria-label="Mes anterior" class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:text-on-surface rounded-full transition-colors active:scale-90" type="button">
+              <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+            </button>
+            <span class="text-label-md text-on-surface px-1 select-none font-medium">Noviembre 2024</span>
+            <button aria-label="Mes siguiente" class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:text-on-surface rounded-full transition-colors active:scale-90" type="button">
+              <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Hero Financial Balance Card -->
+        <div class="relative overflow-hidden rounded-xl bg-primary-container text-on-primary p-space-md shadow-xl">
+          <!-- Ambient Glow -->
+          <div class="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-secondary-container/20 blur-2xl pointer-events-none"></div>
+          <div class="absolute -left-12 -bottom-12 w-40 h-40 rounded-full bg-primary/40 blur-xl pointer-events-none"></div>
+
+          <div class="relative z-10 flex flex-col space-y-space-md">
+            <!-- Balance Row -->
+            <div class="flex items-start justify-between">
+              <div class="flex flex-col">
+                <div class="flex items-center gap-1.5 text-on-primary-container">
+                  <span class="text-body-sm">Balance Total Disponible</span>
+                  <button aria-label="Alternar visibilidad" id="balanceToggleBtn" class="opacity-80 hover:opacity-100 transition-opacity" type="button">
+                    <span id="eyeIcon" class="material-symbols-outlined text-[16px]">visibility</span>
+                  </button>
+                </div>
+                <div class="flex items-baseline gap-1 mt-0.5">
+                  <span id="balanceAmount" class="text-display-lg-mobile font-display-lg-mobile font-bold tracking-tight">$2,450.00</span>
+                </div>
+              </div>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-md bg-secondary text-on-secondary shadow-sm font-semibold">
+                +8.4% este mes
+              </span>
+            </div>
+
+            <!-- Income & Expense Split -->
+            <div class="grid grid-cols-2 gap-space-sm pt-space-xs">
+              <div class="bg-primary/50 backdrop-blur-sm rounded-lg p-2.5 flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-on-secondary-fixed text-[18px]">arrow_downward</span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <span class="text-body-sm text-on-primary-container truncate">Ingresos</span>
+                  <span id="dashIncome" class="text-label-lg text-secondary-fixed font-semibold tracking-tight truncate">+$3,800.00</span>
+                </div>
+              </div>
+
+              <div class="bg-primary/50 backdrop-blur-sm rounded-lg p-2.5 flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-full bg-error-container flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-on-error-container text-[18px]">arrow_upward</span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <span class="text-body-sm text-on-primary-container truncate">Gastos</span>
+                  <span id="dashExpense" class="text-label-lg text-error-container font-semibold tracking-tight truncate">-$1,350.00</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Budget Consumption Progress Bar -->
+            <div class="space-y-1.5 pt-space-xs">
+              <div class="flex items-center justify-between text-body-sm text-on-primary-container">
+                <span class="flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[14px]">savings</span>
+                  <span id="budgetProgressText">Presupuesto Global (62% gastado)</span>
+                </span>
+                <span id="budgetRatioText" class="font-medium text-on-primary">$1,350 / $2,200</span>
+              </div>
+              <div class="w-full h-2 rounded-full bg-primary overflow-hidden">
+                <div id="budgetBar" class="h-full bg-secondary-fixed-dim rounded-full transition-all duration-700 ease-out" style="width: 62%;"></div>
+              </div>
+              <p id="budgetRemainingText" class="text-body-sm text-on-primary-container/80 text-right">Quedan $850.00 para 16 días</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Action Buttons -->
+        <div class="grid grid-cols-3 gap-space-sm">
+          <button data-goto="registrar" class="group flex flex-col items-center justify-center p-3 rounded-xl bg-primary text-on-primary shadow-md active:scale-95 transition-all text-center" type="button">
+            <div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center mb-1.5 shadow-sm group-hover:scale-105 transition-transform">
+              <span class="material-symbols-outlined text-[22px]">add</span>
+            </div>
+            <span class="text-label-md font-semibold leading-tight">Añadir Gasto</span>
+          </button>
+
+          <button data-goto="registrar" class="group flex flex-col items-center justify-center p-3 rounded-xl bg-surface-container-lowest text-on-surface shadow-xs active:scale-95 transition-all text-center hover:bg-surface-container-low" type="button">
+            <div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform">
+              <span class="material-symbols-outlined text-on-secondary-container text-[20px]">payments</span>
+            </div>
+            <span class="text-label-md font-semibold leading-tight">Añadir Ingreso</span>
+          </button>
+
+          <button onclick="alert('📸 Abre la cámara para capturar y escanear el ticket automáticamente mediante OCR.');" class="group flex flex-col items-center justify-center p-3 rounded-xl bg-surface-container-lowest text-on-surface shadow-xs active:scale-95 transition-all text-center hover:bg-surface-container-low" type="button">
+            <div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform">
+              <span class="material-symbols-outlined text-primary text-[20px]">document_scanner</span>
+            </div>
+            <span class="text-label-md font-semibold leading-tight">Escanear Recibo</span>
+          </button>
+        </div>
+
+        <!-- Visual Delight & Insights Highlight -->
+        <div class="p-3.5 bg-surface-container-lowest rounded-xl shadow-xs flex items-center gap-space-md border border-slate-100">
+          <div class="relative w-14 h-14 rounded-lg overflow-hidden shrink-0 shadow-inner bg-secondary-container/30 flex items-center justify-center">
+            <span class="material-symbols-outlined text-3xl text-secondary">potted_plant</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1 text-secondary text-label-md font-semibold">
+              <span class="material-symbols-outlined text-[16px]">eco</span>
+              <span>Hábito del Día</span>
+            </div>
+            <p class="text-body-sm text-on-surface-variant line-clamp-2 mt-0.5">¡Gran control! Llevas 4 días consecutivos por debajo de tu límite presupuestario diario.</p>
+          </div>
+          <span class="material-symbols-outlined text-on-surface-variant/40 shrink-0 text-[18px]">chevron_right</span>
+        </div>
+
+        <!-- Category Breakdown Chips Carousel -->
+        <div class="space-y-space-sm">
+          <div class="flex items-center justify-between">
+            <h2 class="text-headline-sm text-on-surface">Distribución de Gastos</h2>
+            <span class="text-label-md text-secondary font-semibold">Noviembre</span>
+          </div>
+
+          <!-- Horizontal Scroll Chips -->
+          <div id="dashCategoryChips" class="flex gap-space-sm overflow-x-auto pb-1 -mx-gutter px-gutter" style="-webkit-overflow-scrolling: touch;">
+            <!-- Dynamically populated from state -->
+          </div>
+        </div>
+
+        <!-- Recent Movements List -->
+        <div class="space-y-space-sm pb-space-sm">
+          <div class="flex items-center justify-between">
+            <h2 class="text-headline-sm text-on-surface">Movimientos Recientes</h2>
+            <button class="text-label-md text-secondary font-semibold hover:underline" onclick="switchView('estadisticas')">
+              Ver estadísticas
+            </button>
+          </div>
+
+          <div id="recentTransactionsList" class="space-y-2">
+            <!-- Dynamically populated from state -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================== -->
+      <!-- VIEW 2: REGISTRAR (NUEVO MOVIMIENTO)           -->
+      <!-- ============================================== -->
+      <section id="view-registrar" class="view-panel px-margin space-y-space-md">
+        
+        <!-- Type Segmented Control -->
+        <div id="typeSegment" class="w-full bg-surface-container-low p-space-xs rounded-xl shadow-xs flex items-center justify-between">
+          <button data-type="gasto" class="flex-1 py-2 px-space-sm rounded-lg bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-1 shadow-xs transition-all" type="button">
+            <span class="material-symbols-outlined text-[18px]">trending_down</span>
+            Gasto
+          </button>
+          <button data-type="ingreso" class="flex-1 py-2 px-space-sm rounded-lg text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface flex items-center justify-center gap-1 transition-all" type="button">
+            <span class="material-symbols-outlined text-[18px]">trending_up</span>
+            Ingreso
+          </button>
+          <button data-type="transferencia" class="flex-1 py-2 px-space-sm rounded-lg text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface flex items-center justify-center gap-1 transition-all" type="button">
+            <span class="material-symbols-outlined text-[18px]">sync_alt</span>
+            Transferencia
+          </button>
+        </div>
+
+        <!-- Hero Amount Card -->
+        <div class="relative w-full rounded-xl bg-primary-container text-on-primary p-space-lg shadow-md overflow-hidden flex flex-col items-center justify-center">
+          <div class="absolute -right-12 -top-12 w-44 h-44 rounded-full bg-secondary-container/15 blur-2xl pointer-events-none"></div>
+          <div class="absolute -left-10 -bottom-10 w-36 h-36 rounded-full bg-secondary/20 blur-xl pointer-events-none"></div>
+
+          <div class="relative z-10 flex items-center gap-space-xs mb-space-xs">
+            <span class="text-on-primary-container font-label-md uppercase tracking-wider">Monto a Registrar</span>
+            <button id="currencyBtn" class="bg-surface-container-lowest/15 hover:bg-surface-container-lowest/25 px-space-sm py-0.5 rounded-full text-primary-fixed font-data-sm flex items-center gap-1 transition-colors" type="button">
+              <span class="activeCurrencyText">USD ($)</span>
+              <span class="material-symbols-outlined text-[14px]">expand_more</span>
+            </button>
+          </div>
+
+          <!-- Main Amount Interactive Display & Input -->
+          <div class="relative z-10 flex items-center justify-center gap-1 my-space-xs">
+            <span class="currencySymbolText text-primary-fixed font-display-lg-mobile opacity-80">$</span>
+            <input id="expenseAmountInput" type="number" step="0.01" min="0" placeholder="0.00" class="w-48 bg-transparent text-center font-data-metric text-[44px] leading-none tracking-tight font-bold text-on-primary outline-none border-b border-primary-fixed/30 focus:border-primary-fixed"/>
+          </div>
+
+          <p class="relative z-10 text-on-primary-container font-body-sm flex items-center gap-1">
+            <span class="material-symbols-outlined text-[15px] text-secondary-fixed">verified</span>
+            Presupuesto mensual: <span class="font-data-sm text-primary-fixed ml-1">Disponible $420.00</span>
+          </p>
+        </div>
+
+        <!-- Category Selector Section -->
+        <div class="flex flex-col space-y-space-xs">
+          <div class="flex items-center justify-between">
+            <span class="font-headline-sm text-on-surface">Categoría Principal</span>
+            <span class="font-label-md text-secondary font-medium">1 seleccionada</span>
+          </div>
+
+          <!-- Dynamic Categories Grid -->
+          <div id="regCategoryGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-space-xs">
+            <!-- Populated dynamically by app.js -->
+          </div>
+        </div>
+
+        <!-- Interactive Subcategories Section -->
+        <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-space-sm">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-secondary text-[20px]">subdirectory_arrow_right</span>
+              <span id="regSubcategoryTitle" class="font-label-lg text-on-surface">Subcategorías</span>
+            </div>
+            <span class="font-body-sm text-on-surface-variant">Opcional</span>
+          </div>
+
+          <!-- Horizontal Pill Pills -->
+          <div id="regSubcategoryList" class="flex flex-wrap gap-space-xs pt-1">
+            <!-- Populated dynamically by app.js -->
+          </div>
+        </div>
+
+        <!-- Detail Inputs Card -->
+        <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-space-md">
+          <!-- Fecha y Hora -->
+          <div class="flex items-center justify-between gap-space-sm">
+            <div class="flex items-center gap-space-xs text-on-surface">
+              <div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+                <span class="material-symbols-outlined text-[20px]">calendar_today</span>
+              </div>
+              <div class="flex flex-col">
+                <span class="font-label-md text-on-surface-variant">Fecha de registro</span>
+                <span class="font-label-lg text-on-surface font-semibold">Hoy, Nov 2024</span>
+              </div>
+            </div>
+            <button class="px-space-sm py-1 rounded bg-surface-container-low text-secondary font-label-md hover:bg-surface-container" type="button" onclick="alert('Se asigna la fecha y hora actual automáticamente.')">
+              Actual
+            </button>
+          </div>
+
+          <!-- Método de Pago -->
+          <div class="space-y-space-xs">
+            <label class="font-label-md text-on-surface-variant block">Método de Pago</label>
+            <div class="grid grid-cols-3 gap-2">
+              <button data-method="Tarjeta Visa Débito" class="payment-method-pill ring-2 ring-secondary bg-surface-container-low p-2 rounded-lg flex flex-col items-center justify-center text-center transition-all" type="button">
+                <span class="material-symbols-outlined text-[20px] text-primary">credit_card</span>
+                <span class="text-label-md font-semibold mt-1">Visa</span>
+              </button>
+              <button data-method="Efectivo" class="payment-method-pill bg-surface-container p-2 rounded-lg flex flex-col items-center justify-center text-center transition-all" type="button">
+                <span class="material-symbols-outlined text-[20px] text-secondary">payments</span>
+                <span class="text-label-md font-semibold mt-1">Efectivo</span>
+              </button>
+              <button data-method="Tarjeta Crédito" class="payment-method-pill bg-surface-container p-2 rounded-lg flex flex-col items-center justify-center text-center transition-all" type="button">
+                <span class="material-symbols-outlined text-[20px] text-tertiary">contactless</span>
+                <span class="text-label-md font-semibold mt-1">Crédito</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Nota / Concepto -->
+          <div class="space-y-1">
+            <label class="font-label-md text-on-surface-variant block" for="expenseNote">Nota o concepto</label>
+            <div class="relative flex items-center">
+              <span class="material-symbols-outlined absolute left-3 text-outline text-[20px]">edit_note</span>
+              <input id="expenseNote" class="w-full h-12 pl-10 pr-space-md rounded-lg bg-surface-container-low text-on-surface font-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container" placeholder="Ej. Compra semanal de despensa" type="text"/>
+            </div>
+          </div>
+
+          <!-- Adjuntar Comprobante -->
+          <div class="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low">
+            <div class="flex items-center gap-space-xs">
+              <div class="w-10 h-10 rounded-lg bg-surface-container text-secondary flex items-center justify-center">
+                <span class="material-symbols-outlined text-[22px]">receipt_long</span>
+              </div>
+              <div class="flex flex-col">
+                <span class="font-label-md text-on-surface font-semibold">Comprobante o ticket</span>
+                <span class="font-body-sm text-on-surface-variant">Sube una foto o PDF</span>
+              </div>
+            </div>
+            <button class="h-9 px-space-sm rounded-lg bg-surface-container-highest text-primary font-label-md flex items-center gap-1 hover:bg-surface-container transition-colors" type="button" onclick="alert('📸 Puedes tomar una foto del recibo para anexarlo.')">
+              <span class="material-symbols-outlined text-[18px]">photo_camera</span>
+              Subir
+            </button>
+          </div>
+
+          <!-- Recurring Expense Switch -->
+          <div class="flex items-center justify-between pt-1">
+            <div class="flex items-center gap-space-xs">
+              <span class="material-symbols-outlined text-secondary text-[22px]">update</span>
+              <div class="flex flex-col">
+                <span class="font-label-md text-on-surface font-semibold">Gasto recurrente</span>
+                <span class="font-body-sm text-on-surface-variant">Programar cada mes automáticamente</span>
+              </div>
+            </div>
+            <button id="recurringToggle" aria-checked="false" class="w-12 h-6 rounded-full bg-outline-variant p-0.5 transition-colors duration-200 ease-in-out flex items-center" role="switch" type="button">
+              <span id="toggleCircle" class="w-5 h-5 rounded-full bg-surface-container-lowest shadow-sm transform transition-transform duration-200 ease-in-out pointer-events-none translate-x-0"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Primary Action CTA Button -->
+        <div class="w-full pt-space-xs pb-space-lg">
+          <button id="saveExpenseBtn" class="w-full h-14 rounded-xl bg-primary text-on-primary font-label-lg flex items-center justify-center gap-2 shadow-md hover:bg-tertiary transition-transform active:scale-[0.98]" type="button">
+            <span class="material-symbols-outlined text-[22px]">check_circle</span>
+            <span id="saveExpenseText">Guardar Gasto</span>
+          </button>
+          <p class="text-center font-body-sm text-on-surface-variant mt-2">
+            Se sincronizará al instante con tu presupuesto mensual
+          </p>
+        </div>
+
+      </section>
+
+      <!-- ============================================== -->
+      <!-- VIEW 3: ESTADÍSTICAS                           -->
+      <!-- ============================================== -->
+      <section id="view-estadisticas" class="view-panel px-margin space-y-space-md">
+        
+        <!-- Period Selector Segmented Pills -->
+        <div class="w-full flex items-center justify-between bg-surface-container-low p-1 rounded-xl shadow-xs">
+          <button class="flex-1 py-1.5 px-space-xs text-center rounded-lg font-label-md text-on-surface-variant hover:text-on-surface transition-all" type="button">
+            Semana
+          </button>
+          <button class="flex-1 py-1.5 px-space-xs text-center rounded-lg bg-primary-container text-on-primary font-label-md shadow-xs transition-all font-semibold" type="button">
+            Mes
+          </button>
+          <button class="flex-1 py-1.5 px-space-xs text-center rounded-lg font-label-md text-on-surface-variant hover:text-on-surface transition-all" type="button">
+            Año
+          </button>
+          <button class="flex-1 py-1.5 px-space-xs text-center rounded-lg font-label-md text-on-surface-variant hover:text-on-surface transition-all" type="button">
+            Total
+          </button>
+        </div>
+
+        <!-- Metric Overview Card (Hero) -->
+        <div class="relative overflow-hidden rounded-xl bg-primary-container text-on-primary p-space-lg shadow-xl">
+          <div class="absolute -right-8 -top-8 w-44 h-44 rounded-full bg-secondary opacity-25 blur-2xl pointer-events-none"></div>
+          <div class="relative z-10 flex flex-col gap-space-md">
+            <div class="flex items-center justify-between">
+              <span class="font-label-md text-on-primary-container tracking-wider uppercase">Gasto Total Acumulado</span>
+              <span class="inline-flex items-center gap-1 font-label-md px-2 py-0.5 rounded-full bg-secondary text-on-secondary shadow-sm font-semibold">
+                <span class="material-symbols-outlined text-[14px]">calendar_today</span> Noviembre
+              </span>
+            </div>
+
+            <div class="flex flex-col">
+              <div class="flex items-baseline gap-1">
+                <span id="statTotalExpense" class="font-display-lg-mobile text-on-primary font-bold tracking-tight">$1,350.00</span>
+                <span class="activeCurrencyText font-label-md text-on-primary-container">USD</span>
+              </div>
+            </div>
+
+            <!-- Variance & Substats Grid -->
+            <div class="flex flex-col gap-space-sm pt-space-xs">
+              <div class="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-secondary-container text-on-secondary-container self-start">
+                <span class="material-symbols-outlined text-[18px]">trending_down</span>
+                <span class="font-label-md font-semibold">↓ 8.5% menos que el mes pasado</span>
+                <span class="text-label-md opacity-80">(Ahorro $125.00)</span>
+              </div>
+              <div class="flex items-center justify-between pt-space-xs mt-space-xs bg-black/10 rounded-lg p-2.5 backdrop-blur-xs">
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-secondary-fixed-dim text-[18px]">pace</span>
+                  <span class="font-body-sm text-on-primary/90">Ritmo de gasto diario:</span>
+                </div>
+                <span id="statDailyPace" class="font-data-sm text-secondary-fixed font-bold">$45.00 / día</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Donut Breakdown Section -->
+        <div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md gap-space-md">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-secondary text-[22px]">donut_large</span>
+              <h2 class="font-headline-sm text-on-surface">Distribución por Categorías</h2>
+            </div>
+            <button aria-label="Información adicional" class="text-on-surface-variant hover:text-on-surface" type="button" onclick="alert('El gráfico calcula la proporción real de tus gastos según los registros guardados.')">
+              <span class="material-symbols-outlined text-[20px]">info</span>
+            </button>
+          </div>
+
+          <!-- SVG Donut Chart Visualizer -->
+          <div class="relative flex items-center justify-center my-space-xs">
+            <svg id="donutSvgContainer" class="w-48 h-48 -rotate-90 transform" viewBox="0 0 160 160">
+              <!-- Dynamically populated circles -->
+            </svg>
+
+            <!-- Donut Center Badge -->
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+              <span class="font-label-md text-on-surface-variant uppercase tracking-wider">Total</span>
+              <span class="font-data-metric text-on-surface font-bold">Gastos</span>
+              <span class="font-body-sm text-secondary font-semibold">Categorizados</span>
+            </div>
+          </div>
+
+          <!-- Category Interactive Legend List -->
+          <div id="donutLegendContainer" class="flex flex-col gap-space-sm pt-space-xs">
+            <!-- Dynamically populated legend from app.js -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================== -->
+      <!-- VIEW 4: CATEGORÍAS & PRESUPUESTOS              -->
+      <!-- ============================================== -->
+      <section id="view-categorias" class="view-panel px-margin space-y-space-md">
+        
+        <!-- Top Search & Quick Action Header -->
+        <div class="flex items-center gap-space-sm pt-space-xs">
+          <div class="flex-1 relative flex items-center bg-surface-container-lowest rounded-xl shadow-xs px-space-md h-12">
+            <span class="material-symbols-outlined text-outline text-[20px] shrink-0">search</span>
+            <input id="categorySearch" class="w-full bg-transparent border-0 outline-none text-body-md text-on-surface placeholder:text-outline ml-space-xs" placeholder="Buscar categoría o etiqueta..." type="text"/>
+            <button id="clearSearch" aria-label="Limpiar búsqueda" class="text-outline hover:text-on-surface p-1 rounded-full hidden" type="button">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+          <button id="btnNewCategory" class="h-12 px-space-md bg-primary hover:bg-primary-container active:scale-95 text-on-primary rounded-xl flex items-center gap-1.5 shadow-xs transition-all shrink-0" type="button">
+            <span class="material-symbols-outlined text-[20px]">add</span>
+            <span class="text-label-lg whitespace-nowrap">Nueva</span>
+          </button>
+        </div>
+
+        <!-- Hero Budget Card: Resumen de Presupuesto Global Asignado -->
+        <div class="relative overflow-hidden bg-primary-container text-on-primary rounded-xl p-space-lg shadow-xl shadow-primary-container/20">
+          <div class="absolute -right-8 -top-8 w-40 h-40 bg-secondary-container/10 rounded-full blur-2xl pointer-events-none"></div>
+          <div class="absolute right-0 bottom-0 opacity-10 pointer-events-none pr-4 pb-2">
+            <span class="material-symbols-outlined text-[100px]">account_balance_wallet</span>
+          </div>
+          <div class="relative z-10 flex flex-col space-y-space-sm">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-secondary-container text-on-secondary-container">
+                  <span class="material-symbols-outlined text-[15px]">donut_large</span>
+                </span>
+                <span class="text-label-md tracking-wider uppercase opacity-90 font-medium">Presupuesto Mensual</span>
+              </div>
+              <div class="flex items-center gap-1 bg-surface-container-lowest/15 backdrop-blur-md px-2.5 py-1 rounded-full">
+                <span class="material-symbols-outlined text-[14px] text-secondary-fixed">calendar_today</span>
+                <span class="text-label-md text-on-primary font-semibold">Faltan 15 días</span>
+              </div>
+            </div>
+
+            <div class="flex items-baseline gap-2 pt-1">
+              <span class="text-display-lg-mobile font-bold tracking-tight">$1,350</span>
+              <span class="text-body-md text-on-primary-container">de $2,200 presupuestados</span>
+            </div>
+
+            <!-- Linear progress bar with emerald glow -->
+            <div class="space-y-1.5 pt-1">
+              <div class="w-full h-3 bg-primary/60 rounded-full overflow-hidden p-0.5 backdrop-blur-sm">
+                <div class="h-full bg-gradient-to-r from-secondary-fixed via-secondary-container to-secondary-fixed-dim rounded-full transition-all duration-700 ease-out" style="width: 61.3%;"></div>
+              </div>
+              <div class="flex justify-between text-body-sm text-on-primary-container">
+                <span>61.3% consumido</span>
+                <span class="text-secondary-fixed font-semibold">$850 disponible</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter Pills / Tabs -->
+        <div id="filterPills" class="flex items-center gap-2 overflow-x-auto pb-1">
+          <button data-filter="all" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 bg-primary text-on-primary shadow-xs font-semibold" type="button">
+            Todas
+          </button>
+          <button data-filter="active" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 bg-surface-container-lowest text-on-surface-variant hover:text-on-surface font-medium" type="button">
+            Con presupuesto activo
+          </button>
+          <button data-filter="unlimited" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 bg-surface-container-lowest text-on-surface-variant hover:text-on-surface font-medium" type="button">
+            Sin límite asignado
+          </button>
+        </div>
+
+        <!-- Categories & Subcategories List Feed -->
+        <div id="categoryFeed" class="space-y-space-md pb-6">
+          <!-- Dynamically populated from app.js -->
+        </div>
+
+      </section>
+
+      <!-- ============================================== -->
+      <!-- VIEW 5: PRESUPUESTOS (VISTA DEDICADA)          -->
+      <!-- ============================================== -->
+      <section id="view-presupuestos" class="view-panel px-margin space-y-space-md">
+        <div class="p-6 bg-surface-container-lowest rounded-xl shadow-xs text-center space-y-3">
+          <div class="w-16 h-16 rounded-full bg-secondary-container/40 text-secondary flex items-center justify-center mx-auto">
+            <span class="material-symbols-outlined text-3xl">savings</span>
+          </div>
+          <h2 class="text-headline-md font-bold text-on-surface">Gestión de Presupuestos</h2>
+          <p class="text-body-md text-on-surface-variant">
+            Configura tus techos de gasto mensuales por categoría para recibir alertas inteligentes antes de excederlos.
+          </p>
+          <div class="pt-2">
+            <button onclick="switchView('categorias')" class="px-5 py-2.5 bg-primary text-on-primary rounded-xl font-label-lg shadow-sm hover:bg-tertiary transition-transform active:scale-95">
+              Administrar Límites por Categoría
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="fixed bottom-0 inset-x-0 mx-auto max-w-md w-full z-50 pb-safe bg-surface-container-lowest/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(11,28,48,0.06)]" data-active-classes="text-secondary font-semibold">
+      <div class="flex items-center justify-around h-16 px-gutter max-w-md mx-auto">
+        <!-- Tab: Inicio -->
+        <a aria-current="page" class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 transition-colors text-secondary font-semibold" data-path="inicio" href="#">
+          <span class="material-symbols-outlined text-[24px]">home</span>
+          <span class="text-label-md">Inicio</span>
+        </a>
+
+        <!-- Tab: Estadísticas -->
+        <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="estadisticas" href="#">
+          <span class="material-symbols-outlined text-[24px]">bar_chart</span>
+          <span class="text-label-md">Estadísticas</span>
+        </a>
+
+        <!-- Floating Central Add Button: Registrar -->
+        <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] -mt-5 group" data-path="registrar" href="#">
+          <div class="w-12 h-12 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_8px_16px_-2px_rgba(6,78,59,0.35)] active:scale-90 transition-transform group-hover:scale-105">
+            <span class="material-symbols-outlined text-[26px]">add</span>
+          </div>
+          <span class="text-label-md text-on-surface-variant group-hover:text-on-surface mt-1 font-medium">Registrar</span>
+        </a>
+
+        <!-- Tab: Categorías -->
+        <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="categorias" href="#">
+          <span class="material-symbols-outlined text-[24px]">grid_view</span>
+          <span class="text-label-md">Categorías</span>
+        </a>
+
+        <!-- Tab: Presupuesto -->
+        <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="presupuestos" href="#">
+          <span class="material-symbols-outlined text-[24px]">account_balance_wallet</span>
+          <span class="text-label-md">Presupuesto</span>
+        </a>
+      </div>
+    </nav>
+
+    <!-- Notification Sheet / Modal -->
+    <div id="notificationsModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end justify-center">
+      <div class="modal-sheet w-full max-w-md bg-surface-container-lowest rounded-t-2xl p-space-lg shadow-2xl space-y-space-md">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-secondary text-[22px]">notifications_active</span>
+            <h3 class="font-headline-sm text-on-surface">Notificaciones y Alertas</h3>
+          </div>
+          <button id="closeNotificationsBtn" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant" type="button">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div class="space-y-3">
+          <div class="p-3 bg-error-container/40 rounded-xl flex items-start gap-3">
+            <span class="material-symbols-outlined text-error text-[20px] mt-0.5">warning</span>
+            <div>
+              <p class="text-body-sm font-semibold text-on-surface">Alerta de Alimentación</p>
+              <p class="text-body-sm text-on-surface-variant">Has consumido el 94.5% de tu presupuesto en Alimentación ($567.00 de $600.00).</p>
+            </div>
+          </div>
+          <div class="p-3 bg-secondary-container/40 rounded-xl flex items-start gap-3">
+            <span class="material-symbols-outlined text-secondary text-[20px] mt-0.5">savings</span>
+            <div>
+              <p class="text-body-sm font-semibold text-on-surface">Meta de Ahorro en camino</p>
+              <p class="text-body-sm text-on-surface-variant">Llevas 8.5% menos de gasto comparado con el mes anterior. ¡Excelente ritmo!</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification Popup -->
+    <div id="toast" class="fixed top-5 z-50 max-w-sm px-4 py-3 bg-primary text-on-primary rounded-xl shadow-2xl flex items-center gap-2.5 text-body-md font-medium">
+      <span class="material-symbols-outlined text-secondary-fixed text-[20px]">check_circle</span>
+      <span id="toastMessage">Acción completada con éxito</span>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

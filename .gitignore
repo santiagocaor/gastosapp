@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment & Credentials (Protect Stitch API Keys)
+.agents/
+*.env
+*.env.*
+*.log
+
+# OS & IDE Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
