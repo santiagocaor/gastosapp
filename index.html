@@ -208,7 +208,7 @@
             <div class="flex flex-col">
               <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-1.5 text-on-primary-container min-w-0">
-                  <span class="text-body-sm truncate">Balance total disponible</span>
+                  <span class="text-body-sm truncate" title="Ingresos menos gastos de todos los meses">Balance acumulado</span>
                   <button aria-label="Mostrar u ocultar balance" id="balanceToggleBtn" class="opacity-80 hover:opacity-100 transition-opacity" type="button">
                     <span id="eyeIcon" class="material-symbols-outlined text-[16px]">visibility</span>
                   </button>
@@ -216,27 +216,28 @@
                 <span id="balanceBadge" class="hidden inline-flex items-center px-2 py-0.5 rounded-full text-label-md bg-secondary text-on-secondary shadow-sm font-semibold shrink-0"></span>
               </div>
               <span id="balanceAmount" class="mt-0.5 text-display-lg-mobile font-display-lg-mobile font-bold tracking-tight break-all">$0</span>
+              <span id="balanceMonthText" class="text-body-sm text-on-primary-container"></span>
             </div>
 
             <!-- Income & Expense Split -->
             <div class="grid grid-cols-2 gap-space-sm pt-space-xs">
-              <div class="bg-primary/50 backdrop-blur-sm rounded-lg p-2.5 flex items-center gap-2.5">
-                <div class="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center shrink-0">
-                  <span class="material-symbols-outlined text-on-secondary-fixed text-[18px]">arrow_downward</span>
+              <div class="bg-primary/50 backdrop-blur-sm rounded-lg p-2.5 flex items-center gap-2 min-w-0">
+                <div class="w-7 h-7 rounded-full bg-secondary-fixed flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-on-secondary-fixed text-[16px]">arrow_downward</span>
                 </div>
                 <div class="flex flex-col min-w-0">
-                  <span class="text-body-sm text-on-primary-container truncate">Ingresos</span>
-                  <span id="dashIncome" class="text-label-lg text-secondary-fixed font-semibold tracking-tight truncate">+$0</span>
+                  <span class="text-body-sm text-on-primary-container truncate">Ingresos del mes</span>
+                  <span id="dashIncome" class="text-label-lg text-secondary-fixed font-semibold tracking-tight whitespace-nowrap">+$0</span>
                 </div>
               </div>
 
-              <div class="bg-primary/50 backdrop-blur-sm rounded-lg p-2.5 flex items-center gap-2.5">
-                <div class="w-8 h-8 rounded-full bg-error-container flex items-center justify-center shrink-0">
-                  <span class="material-symbols-outlined text-on-error-container text-[18px]">arrow_upward</span>
+              <div class="bg-primary/50 backdrop-blur-sm rounded-lg p-2.5 flex items-center gap-2 min-w-0">
+                <div class="w-7 h-7 rounded-full bg-error-container flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-on-error-container text-[16px]">arrow_upward</span>
                 </div>
                 <div class="flex flex-col min-w-0">
-                  <span class="text-body-sm text-on-primary-container truncate">Gastos</span>
-                  <span id="dashExpense" class="text-label-lg text-error-container font-semibold tracking-tight truncate">-$0</span>
+                  <span class="text-body-sm text-on-primary-container truncate">Gastos del mes</span>
+                  <span id="dashExpense" class="text-label-lg text-error-container font-semibold tracking-tight whitespace-nowrap">-$0</span>
                 </div>
               </div>
             </div>
@@ -276,20 +277,23 @@
         </div>
 
         <!-- Conversor de Divisas en Tiempo Real (COP ⇄ CAD) -->
-        <div class="bg-surface-container-lowest rounded-2xl p-4 shadow-xs border border-slate-200/90 space-y-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
+        <div class="bg-surface-container-lowest rounded-2xl px-4 py-3 shadow-xs border border-slate-200/90 space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <button id="converterToggleBtn" type="button" data-action="toggle-converter" aria-expanded="false" aria-controls="converterBody" class="flex-1 flex items-center gap-2 min-w-0 text-left">
               <div class="w-8 h-8 rounded-lg bg-secondary/10 text-secondary flex items-center justify-center shrink-0">
                 <span class="material-symbols-outlined text-[20px]">currency_exchange</span>
               </div>
-              <div>
-                <h3 class="text-label-lg font-bold text-on-surface leading-tight">Conversor de Divisas</h3>
-                <div class="flex items-center gap-1.5 text-[11px] text-on-surface-variant">
-                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span id="rateTimestamp">Tasa en vivo al instante</span>
+              <div class="min-w-0">
+                <h3 class="text-label-lg font-bold text-on-surface leading-tight flex items-center gap-1">
+                  <span id="converterHeaderRate">Tasa del día</span>
+                  <span id="converterChevron" class="material-symbols-outlined text-[18px] text-on-surface-variant transition-transform">expand_more</span>
+                </h3>
+                <div class="flex items-center gap-1.5 text-[11px] text-on-surface-variant whitespace-nowrap">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                  <span id="rateTimestamp" class="truncate">Tasa en vivo al instante</span>
                 </div>
               </div>
-            </div>
+            </button>
 
             <!-- Botón para refrescar tasa -->
             <button id="refreshExchangeRateBtn" onclick="fetchLiveExchangeRate(true)" aria-label="Actualizar cotización" class="p-1.5 rounded-lg text-on-surface-variant hover:text-secondary hover:bg-surface-container-low transition-colors cursor-pointer" title="Actualizar cotización en vivo" type="button">
@@ -297,6 +301,7 @@
             </button>
           </div>
 
+          <div id="converterBody" class="hidden space-y-3">
           <!-- Selector de Dirección de Conversión -->
           <div class="flex items-center justify-between bg-surface-container-low p-1 rounded-xl">
             <button id="modeCopToCad" onclick="setConversionDirection('COP_TO_CAD')" class="flex-1 py-1.5 px-2 rounded-lg text-label-md font-semibold text-center transition-all bg-primary text-on-primary shadow-xs cursor-pointer flex items-center justify-center gap-1" type="button">
@@ -350,6 +355,7 @@
             <span class="text-[11px] text-on-surface-variant font-medium block">Valores frecuentes:</span>
             <div id="converterPresetChips" class="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px]"></div>
           </div>
+          </div>
         </div>
 
         <!-- Category Breakdown Chips Carousel -->
@@ -377,11 +383,8 @@
         <!-- Movimientos del mes -->
         <div class="space-y-space-sm pb-space-sm">
           <div class="flex items-center justify-between gap-2">
-            <h2 id="movementsTitle" class="text-headline-sm text-on-surface truncate">Movimientos</h2>
-            <div class="flex items-center gap-3 shrink-0">
-              <button id="toggleMovementsBtn" data-action="toggle-movements" class="hidden text-label-md text-secondary font-semibold hover:underline" type="button">Ver todos</button>
-              <button class="text-label-md text-secondary font-semibold hover:underline" data-action="goto" data-view="estadisticas" type="button">Estadísticas</button>
-            </div>
+            <h2 id="movementsTitle" class="text-headline-sm text-on-surface truncate">Últimos movimientos</h2>
+            <button id="toggleMovementsBtn" data-action="goto" data-view="movimientos" class="text-label-md text-secondary font-semibold hover:underline shrink-0" type="button">Ver todos</button>
           </div>
           <p class="text-[11px] text-outline -mt-1">Toca un movimiento para editarlo.</p>
 
@@ -559,7 +562,7 @@
 
             <div class="flex items-baseline gap-1">
               <span id="statTotalExpense" class="text-display-lg-mobile font-display-lg-mobile text-on-primary font-bold tracking-tight">$0</span>
-              <span id="statCurrencyLabel" class="font-label-md text-on-primary-container">CAD</span>
+              
             </div>
 
             <div class="flex flex-col gap-space-sm">
@@ -632,66 +635,44 @@
       </section>
 
       <!-- ============================================== -->
-      <!-- VIEW 4: CATEGORÍAS                             -->
+      <!-- VIEW 4: MOVIMIENTOS (HISTORIAL CON FILTROS)    -->
       <!-- ============================================== -->
-      <section id="view-categorias" class="view-panel px-margin space-y-space-md">
+      <section id="view-movimientos" class="view-panel px-margin space-y-space-sm pb-6">
 
-        <!-- Buscador y nuevo concepto -->
-        <div class="flex items-center gap-space-sm pt-space-xs">
-          <div class="flex-1 relative flex items-center bg-surface-container-lowest rounded-xl shadow-xs px-space-md h-12">
-            <span class="material-symbols-outlined text-outline text-[20px] shrink-0">search</span>
-            <input id="categorySearch" aria-label="Buscar categoría" class="w-full bg-transparent border-0 outline-none text-body-md text-on-surface placeholder:text-outline ml-space-xs" placeholder="Buscar categoría o concepto..." type="search"/>
-            <button id="clearSearch" aria-label="Limpiar búsqueda" class="text-outline hover:text-on-surface p-1 rounded-full hidden" type="button">
-              <span class="material-symbols-outlined text-[18px]">close</span>
-            </button>
-          </div>
-          <button id="btnNewCategory" class="h-12 px-space-md bg-primary hover:bg-primary-container active:scale-95 text-on-primary rounded-xl flex items-center gap-1.5 shadow-xs transition-all shrink-0" type="button">
-            <span class="material-symbols-outlined text-[20px]">add</span>
-            <span class="text-label-lg whitespace-nowrap">Nueva</span>
-          </button>
-        </div>
-
-        <!-- Resumen del presupuesto del mes -->
-        <div class="relative overflow-hidden bg-primary-container text-on-primary rounded-xl p-space-lg shadow-xl shadow-primary-container/20">
-          <div class="absolute -right-8 -top-8 w-40 h-40 bg-secondary-container/10 rounded-full blur-2xl pointer-events-none"></div>
-          <div class="absolute right-0 bottom-0 opacity-10 pointer-events-none pr-4 pb-2">
-            <span class="material-symbols-outlined text-[100px]">account_balance_wallet</span>
-          </div>
-          <div class="relative z-10 flex flex-col space-y-space-sm">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-label-md tracking-wider uppercase opacity-90 font-medium">Presupuesto mensual</span>
-              <div class="flex items-center gap-1 bg-surface-container-lowest/15 backdrop-blur-md px-2.5 py-1 rounded-full">
-                <span class="material-symbols-outlined text-[14px] text-secondary-fixed">calendar_today</span>
-                <span id="catHeroDays" class="text-label-md text-on-primary font-semibold whitespace-nowrap"></span>
-              </div>
-            </div>
-
-            <div class="flex items-baseline flex-wrap gap-x-2 pt-1">
-              <span id="catHeroSpent" class="text-display-lg-mobile font-bold tracking-tight">$0</span>
-              <span id="catHeroBudget" class="text-body-md text-on-primary-container"></span>
-            </div>
-
-            <div class="space-y-1.5 pt-1">
-              <div class="w-full h-3 bg-primary/60 rounded-full overflow-hidden p-0.5 backdrop-blur-sm">
-                <div id="catHeroBar" class="h-full bg-gradient-to-r from-secondary-fixed via-secondary-container to-secondary-fixed-dim rounded-full transition-all duration-700 ease-out" style="width: 0%;"></div>
-              </div>
-              <div class="flex justify-between text-body-sm text-on-primary-container">
-                <span id="catHeroPct"></span>
-                <span id="catHeroAvailable" class="text-secondary-fixed font-semibold"></span>
-              </div>
-            </div>
-          </div>
+        <!-- Buscador -->
+        <div class="relative flex items-center bg-surface-container-lowest rounded-xl shadow-xs px-3 h-11 mt-space-xs">
+          <span class="material-symbols-outlined text-outline text-[20px] shrink-0">search</span>
+          <input id="movSearch" aria-label="Buscar movimientos" class="w-full min-w-0 bg-transparent border-0 outline-none text-body-md text-on-surface placeholder:text-outline ml-2" placeholder="Buscar por concepto, nota o categoría…" type="search"/>
         </div>
 
         <!-- Filtros -->
-        <div id="filterPills" class="flex items-center gap-2 overflow-x-auto pb-1">
-          <button data-action="category-filter" data-filter="all" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 font-medium" type="button">Todas</button>
-          <button data-action="category-filter" data-filter="active" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 font-medium" type="button">Con presupuesto activo</button>
-          <button data-action="category-filter" data-filter="unlimited" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 font-medium" type="button">Sin límite asignado</button>
+        <div class="flex items-center gap-2">
+          <div id="movTypePills" class="flex-1 flex items-center bg-surface-container-low p-1 rounded-xl" role="group" aria-label="Tipo">
+            <button data-action="mov-type" data-type="all" class="flex-1 py-1.5 rounded-lg text-label-md font-semibold transition-all" type="button">Todos</button>
+            <button data-action="mov-type" data-type="gasto" class="flex-1 py-1.5 rounded-lg text-label-md font-semibold transition-all" type="button">Gastos</button>
+            <button data-action="mov-type" data-type="ingreso" class="flex-1 py-1.5 rounded-lg text-label-md font-semibold transition-all" type="button">Ingresos</button>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <div id="movPeriodPills" class="flex items-center bg-surface-container-low p-1 rounded-xl shrink-0" role="group" aria-label="Periodo">
+            <button data-action="mov-period" data-period="mes" class="px-2.5 py-1.5 rounded-lg text-label-md font-semibold transition-all whitespace-nowrap" type="button"><span id="movPeriodMonth">Mes</span></button>
+            <button data-action="mov-period" data-period="todo" class="px-2.5 py-1.5 rounded-lg text-label-md font-semibold transition-all" type="button">Todo</button>
+          </div>
+          <label class="sr-only" for="movCategory">Categoría</label>
+          <select id="movCategory" class="flex-1 min-w-0 h-9 px-2 rounded-lg bg-surface-container-low text-on-surface text-label-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary"></select>
+        </div>
+        <p class="text-[11px] text-outline">El mes se cambia con las flechas de Inicio. Toca un movimiento para editarlo.</p>
+
+        <!-- Resumen de lo filtrado -->
+        <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-surface-container-lowest shadow-xs text-label-md">
+          <span id="movSummaryCount" class="font-semibold text-on-surface">0 movimientos</span>
+          <span class="flex items-center gap-3 whitespace-nowrap">
+            <span id="movSummaryIncome" class="font-bold text-secondary">+$0</span>
+            <span id="movSummaryExpense" class="font-bold text-on-surface">-$0</span>
+          </span>
         </div>
 
-        <div id="categoryFeed" class="space-y-space-md pb-6"></div>
-
+        <div id="movList" class="space-y-space-md"></div>
       </section>
 
       <!-- ============================================== -->
@@ -725,10 +706,25 @@
         </div>
 
         <div class="flex items-center justify-between">
-          <h2 class="text-headline-sm text-on-surface">Límites por categoría</h2>
+          <h2 class="text-headline-sm text-on-surface">Categorías y límites</h2>
           <button type="button" data-action="reset-budgets" class="text-label-md text-secondary font-semibold hover:underline">Restablecer</button>
         </div>
-        <p class="text-[11px] text-outline -mt-2">Edita el límite y se guarda al salir del campo. Los límites aplican a todos los meses. <span id="budgetCurrencyNote"></span></p>
+
+        <!-- Buscador del catálogo y nuevo concepto -->
+        <div class="flex items-center gap-space-sm">
+          <div class="flex-1 relative flex items-center bg-surface-container-lowest rounded-xl shadow-xs px-3 h-11 min-w-0">
+            <span class="material-symbols-outlined text-outline text-[20px] shrink-0">search</span>
+            <input id="categorySearch" aria-label="Buscar categoría o concepto" class="w-full min-w-0 bg-transparent border-0 outline-none text-body-md text-on-surface placeholder:text-outline ml-2" placeholder="Buscar concepto…" type="search"/>
+            <button id="clearSearch" aria-label="Limpiar búsqueda" class="text-outline hover:text-on-surface p-1 rounded-full hidden" type="button">
+              <span class="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+          <button id="btnNewCategory" class="h-11 px-3 bg-primary hover:bg-primary-container active:scale-95 text-on-primary rounded-xl flex items-center gap-1 shadow-xs transition-all shrink-0" type="button" title="Agregar un concepto de gasto">
+            <span class="material-symbols-outlined text-[20px]">add</span>
+            <span class="text-label-md whitespace-nowrap">Concepto</span>
+          </button>
+        </div>
+        <p class="text-[11px] text-outline -mt-2">Edita el límite y se guarda al salir del campo; aplica a todos los meses. Toca un concepto para registrarlo. <span id="budgetCurrencyNote"></span></p>
 
         <div id="budgetList" class="space-y-space-sm pb-6"></div>
       </section>
@@ -755,9 +751,9 @@
           <span class="text-label-md text-on-surface-variant group-hover:text-on-surface mt-1 font-medium">Registrar</span>
         </a>
 
-        <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="categorias" href="#">
-          <span class="material-symbols-outlined text-[24px]">grid_view</span>
-          <span class="text-label-md">Categorías</span>
+        <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="movimientos" href="#">
+          <span class="material-symbols-outlined text-[24px]">receipt_long</span>
+          <span class="text-label-md">Movimientos</span>
         </a>
 
         <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="presupuestos" href="#">

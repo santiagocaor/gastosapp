@@ -9,10 +9,10 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
 ## ✨ Características
 
 - 📊 **Inicio**
-  - Balance total acumulado (con modo privacidad), ingresos y gastos del mes y tasa de ahorro.
-  - Selector de mes para revisar meses anteriores.
+  - Balance acumulado (con modo privacidad) y el resultado del mes, ingresos y gastos del mes y tasa de ahorro.
+  - Selector de mes para revisar meses anteriores (también lo usan Movimientos, Estadísticas y Presupuesto).
   - Barra de presupuesto global con lo que queda y los días restantes del mes.
-  - Movimientos del mes: toca uno para **editarlo** o usa la papelera para borrarlo.
+  - Recurrentes por confirmar, conversor de divisas plegable y los últimos 5 movimientos.
 - ➕ **Registrar**
   - Gastos por macro-categoría → subcategoría → concepto (Necesidades, Deseos, Deudas, Ahorros, Inversiones).
   - Ingresos por tipo → concepto.
@@ -32,11 +32,15 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Periodos: últimos 7 días, mes, año y todo el historial.
   - Comparación real con el periodo anterior equivalente, ingresos, ahorro neto y ritmo de gasto diario.
   - Donut por categoría, barras de ingresos vs. gastos de los últimos 6 meses y top 5 de conceptos.
-- 🏷️ **Categorías**
-  - Buscador (ignora tildes), filtros por presupuesto y detalle de subcategorías y conceptos.
-  - **Conceptos propios**: añade subcategorías/conceptos nuevos desde la app (botón *Nueva*).
+- 🧾 **Movimientos**
+  - Todo el historial con buscador (concepto, nota o categoría, sin importar tildes).
+  - Filtros por tipo (gastos/ingresos), categoría y periodo (mes elegido o todo), con totales de lo filtrado.
+  - Agrupado por mes con el neto de cada uno; toca un movimiento para editarlo.
 - 💰 **Presupuesto**
   - Límites mensuales editables en línea por macro-categoría, estado de cada uno y proyección de cierre de mes.
+  - Catálogo de subcategorías y conceptos dentro de cada categoría, con buscador; toca un concepto para registrarlo.
+  - **Conceptos propios**: botón *Concepto* para añadir subcategorías/conceptos nuevos.
+  - Los conceptos largos se muestran con un nombre corto (p. ej. “Restaurantes y bares”); en la hoja se guarda el nombre completo.
 - 🔔 **Alertas** de categorías cerca del tope o excedidas, gastos mayores que ingresos y registros sin sincronizar.
 - 💱 **Conversor COP ⇄ CAD** con tasa de mercado en vivo (es la tasa que usan los registros en CAD) (open.er-api.com, con respaldo en exchangerate-api.com).
 - 💾 **Datos**

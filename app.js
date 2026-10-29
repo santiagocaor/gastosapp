@@ -227,11 +227,12 @@ function fromDisplay(amount) {
   return displayCurrency() === 'CAD' ? amount * cadRate() : amount;
 }
 
-function formatCurrency(amount, currency) {
+function formatCurrency(amount, currency, { compact = false } = {}) {
   const n = Number(amount || 0);
   const sign = n < 0 ? '-' : '';
   if (currency === 'CAD') {
-    return `${sign}CA$${Math.abs(n).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const decimals = compact && Math.abs(n) >= 1000 ? 0 : 2;
+    return `${sign}CA$${Math.abs(n).toLocaleString('en-CA', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
   }
   return `${sign}$${Math.round(Math.abs(n)).toLocaleString('es-CO')}`;
 }
@@ -261,6 +262,35 @@ function newId(prefix) {
 
 function sortMovements(a, b) {
   return String(b.fecha || '').localeCompare(String(a.fecha || '')) || (b.createdAt || 0) - (a.createdAt || 0);
+}
+
+// Nombres cortos para mostrar; en la app y en Sheets se guarda el concepto completo
+const SHORT_CONCEPTS = {
+  "Tarjeta de transporte público": "Transporte público",
+  "Medicamentos recetados y botiquín familiar": "Medicamentos",
+  "Tratamientos odontológicos y salud visual": "Odontología y visión",
+  "Matrícula y pensión escolar / universitaria": "Matrícula y pensión",
+  "Cursos online y certificaciones profesionales": "Cursos y certificaciones",
+  "Libros, útiles escolares y material académico": "Libros y útiles",
+  "Declaración de renta y asesoría tributaria contable": "Declaración de renta",
+  "Ropa de trabajo, dotación y calzado esencial": "Ropa y calzado",
+  "Salidas a restaurantes, cafeterías y bares": "Restaurantes y bares",
+  "Suscripciones de streaming (Netflix, Spotify, etc.)": "Streaming",
+  "Membresía de gimnasio / actividades deportivas": "Gimnasio y deporte",
+  "Peluquería, barbería y tratamientos estéticos": "Peluquería y estética",
+  "Boletos aéreos, reservas hoteleras y tours turísticos": "Vuelos, hoteles y tours",
+  "Perfumería exclusiva, gadgets no esenciales y accesorios": "Lujos y gadgets",
+  "Obsequios de cumpleaños, aniversarios y fiestas decembrinas": "Regalos",
+  "Cuota periódica pactada con familiares": "Cuota a familiares",
+  "Aporte a cuenta de alto rendimiento para imprevistos": "Fondo de emergencia",
+  "Aporte programado para tiquetes y viáticos a Colombia": "Ahorro viaje Colombia",
+  "Aporte a fondo de pensión voluntaria con beneficio tributario": "Pensión voluntaria",
+  "Inversión periódica en ETFs indexados globales y acciones": "ETFs y acciones",
+  "Aporte a fiducia / cuota inicial de inversión sobre planos": "Fiducia / cuota inicial"
+};
+
+function shortConcept(c) {
+  return SHORT_CONCEPTS[c] || c || '';
 }
 
 // Catálogo de gastos: el de Sheets + lo que se haya añadido desde la app
@@ -389,8 +419,8 @@ class AppState {
   }
 
   // Recibe un monto en COP y lo muestra en la moneda elegida (CAD o COP)
-  formatMoney(amountCOP) {
-    return formatCurrency(toDisplay(Number(amountCOP || 0)), displayCurrency());
+  formatMoney(amountCOP, opts) {
+    return formatCurrency(toDisplay(Number(amountCOP || 0)), displayCurrency(), opts);
   }
 
   gastosEntre(start, end) {
@@ -792,10 +822,10 @@ const state = new AppState();
 const ui = {
   viewMonth: currentMonthKey(),
   statsPeriod: 'mes',
-  showAllMovements: false,
   openAcc: new Set(),
   categorySearch: '',
-  categoryFilter: 'all'
+  converterOpen: false,
+  mov: { q: '', type: 'all', cat: 'all', period: 'mes' } // filtros de la pestaña Movimientos
 };
 
 // Estado del formulario de registro
@@ -820,6 +850,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initModals();
   initSettings();
   initCategorySearch();
+  initMovementsFilters();
   initCurrencyConverter();
   switchView(state.data.activeTab || 'inicio', { scroll: false });
   processRecurring();
@@ -874,8 +905,8 @@ const VIEW_TITLES = {
   inicio: 'Inicio',
   estadisticas: 'Estadísticas',
   registrar: 'Registrar',
-  categorias: 'Categorías',
-  presupuestos: 'Presupuestos'
+  movimientos: 'Movimientos',
+  presupuestos: 'Presupuesto'
 };
 
 function switchView(viewName, { scroll = true } = {}) {
@@ -919,9 +950,17 @@ function initActions() {
       case 'goto': switchView(d.view); break;
       case 'month-prev': changeViewMonth(-1); break;
       case 'month-next': changeViewMonth(1); break;
-      case 'toggle-movements':
-        ui.showAllMovements = !ui.showAllMovements;
-        renderMovementsList();
+      case 'mov-type':
+        ui.mov.type = d.type;
+        renderMovementsView();
+        break;
+      case 'mov-period':
+        ui.mov.period = d.period;
+        renderMovementsView();
+        break;
+      case 'toggle-converter':
+        ui.converterOpen = !ui.converterOpen;
+        renderConverterToggle();
         break;
       case 'edit': startEdit(d.type, d.id); break;
       case 'delete': deleteItem(d.type, d.id); break;
@@ -953,11 +992,7 @@ function initActions() {
       case 'toggle-acc':
         if (ui.openAcc.has(d.macro)) ui.openAcc.delete(d.macro);
         else ui.openAcc.add(d.macro);
-        renderCategoriesView();
-        break;
-      case 'category-filter':
-        ui.categoryFilter = d.filter;
-        renderCategoriesView();
+        renderBudgetsView();
         break;
       case 'remove-concept': removeCustomConcept(d.macro, d.sub, d.concepto); break;
       case 'use-concept': useConcept(d.macro, d.sub, d.concepto); break;
@@ -1012,7 +1047,6 @@ function changeViewMonth(delta) {
   const next = shiftMonth(ui.viewMonth, delta);
   if (next > currentMonthKey()) return;
   ui.viewMonth = next;
-  ui.showAllMovements = false;
   renderAll();
 }
 
@@ -1049,14 +1083,21 @@ function renderAll() {
   renderDashboard();
   renderMovementsList();
   renderFormSyncHints();
-  renderCategoriesView();
   renderBudgetsView();
+  renderMovementsView();
   renderStatisticsView();
   renderNotifications();
   renderSettingsStatus();
   renderRecurringCard();
   if (document.getElementById('recurringModal')?.classList.contains('open')) renderRecurringModal();
   renderCurrencyLabels();
+  renderConverterToggle();
+}
+
+function renderConverterToggle() {
+  document.getElementById('converterBody')?.classList.toggle('hidden', !ui.converterOpen);
+  document.getElementById('converterChevron')?.classList.toggle('rotate-180', ui.converterOpen);
+  document.getElementById('converterToggleBtn')?.setAttribute('aria-expanded', ui.converterOpen);
 }
 
 function renderCurrencyLabels() {
@@ -1102,8 +1143,11 @@ function renderDashboard() {
   const todayBtn = document.getElementById('monthTodayBtn');
   if (todayBtn) todayBtn.classList.toggle('hidden', isCurrent);
 
-  setText('dashIncome', `+${state.formatMoney(totalIngresos)}`);
-  setText('dashExpense', `-${state.formatMoney(totalGastos)}`);
+  const compact = { compact: true };
+  setText('dashIncome', `+${state.formatMoney(totalIngresos, compact)}`);
+  setText('dashExpense', `-${state.formatMoney(totalGastos, compact)}`);
+  const monthNet = totalIngresos - totalGastos;
+  setText('balanceMonthText', `${isCurrent ? 'Este mes' : monthLabel(key)}: ${monthNet >= 0 ? '+' : ''}${state.formatMoney(monthNet, compact)}`);
 
   // Tasa de ahorro del mes
   const badge = document.getElementById('balanceBadge');
@@ -1120,7 +1164,7 @@ function renderDashboard() {
   }
 
   setText('budgetProgressText', `Presupuesto ${Math.round(b.pctRaw)}%`);
-  setText('budgetRatioText', `${state.formatMoney(b.spent)} / ${state.formatMoney(b.budget)}`);
+  setText('budgetRatioText', `${state.formatMoney(b.spent, { compact: true })} / ${state.formatMoney(b.budget, { compact: true })}`);
   const bBar = document.getElementById('budgetBar');
   if (bBar) {
     bBar.style.width = `${b.pct}%`;
@@ -1147,7 +1191,7 @@ function renderDashboard() {
       const conf = BD_GASTOS[macro];
 
       return `
-        <button type="button" data-action="goto" data-view="categorias" class="flex items-center gap-2.5 p-2.5 pr-3.5 bg-surface-container-lowest rounded-xl shadow-xs shrink-0 min-w-[155px] text-left hover:bg-surface-container-low transition-all active:scale-95">
+        <button type="button" data-action="goto" data-view="presupuestos" class="flex items-center gap-2.5 p-2.5 pr-3.5 bg-surface-container-lowest rounded-xl shadow-xs shrink-0 min-w-[155px] text-left hover:bg-surface-container-low transition-all active:scale-95">
           <div class="w-9 h-9 rounded-lg bg-secondary-container/40 flex items-center justify-center text-secondary shrink-0">
             <span class="material-symbols-outlined text-[20px]">${conf.icon}</span>
           </div>
@@ -1155,7 +1199,7 @@ function renderDashboard() {
             <span class="text-body-sm font-semibold text-on-surface truncate">${escapeHtml(macro)}</span>
             <div class="flex items-center gap-1.5">
               <span class="text-label-md text-secondary font-bold">${percent}%</span>
-              <span class="text-body-sm text-on-surface-variant truncate">${state.formatMoney(spent)}</span>
+              <span class="text-body-sm text-on-surface-variant whitespace-nowrap">${state.formatMoney(spent, { compact: true })}</span>
             </div>
           </div>
         </button>
@@ -1169,7 +1213,7 @@ function movementRow(m) {
   const sign = isGasto ? '-' : '+';
   const color = isGasto ? 'text-on-surface font-semibold' : 'text-secondary font-bold';
   const icon = isGasto ? (BD_GASTOS[m.macroCategoria]?.icon || 'trending_down') : (BD_INGRESOS[m.tipoIngreso]?.icon || 'trending_up');
-  const title = escapeHtml(m.concepto || (isGasto ? m.subcategoria : m.tipoIngreso));
+  const title = escapeHtml(shortConcept(m.concepto) || (isGasto ? m.subcategoria : m.tipoIngreso));
   const subtitle = escapeHtml(isGasto ? `${m.macroCategoria} › ${m.subcategoria}` : `Ingreso › ${m.tipoIngreso}`);
   const pending = m.synced === false && state.data.googleScriptUrl
     ? `<span class="material-symbols-outlined text-[14px] text-outline align-middle" title="Pendiente de enviar a Google Sheets">cloud_off</span>`
@@ -1220,12 +1264,8 @@ function renderMovementsList() {
 
   setText('movementsTitle', `Movimientos de ${monthLabel(ui.viewMonth).toLowerCase()}`);
 
-  const toggleBtn = document.getElementById('toggleMovementsBtn');
-  const LIMIT = 8;
-  if (toggleBtn) {
-    toggleBtn.classList.toggle('hidden', all.length <= LIMIT);
-    toggleBtn.textContent = ui.showAllMovements ? 'Ver menos' : `Ver todos (${all.length})`;
-  }
+  const LIMIT = 5;
+  setText('toggleMovementsBtn', all.length > LIMIT ? `Ver todos (${all.length})` : 'Ver todos');
 
   if (all.length === 0) {
     container.innerHTML = `
@@ -1238,7 +1278,95 @@ function renderMovementsList() {
     return;
   }
 
-  container.innerHTML = (ui.showAllMovements ? all : all.slice(0, LIMIT)).map(movementRow).join('');
+  container.innerHTML = all.slice(0, LIMIT).map(movementRow).join('');
+}
+
+// --------------------------------------------------------
+// Pestaña Movimientos: buscador y filtros sobre todo el historial
+// --------------------------------------------------------
+function initMovementsFilters() {
+  const q = document.getElementById('movSearch');
+  q?.addEventListener('input', () => { ui.mov.q = q.value; renderMovementsView(); });
+  const cat = document.getElementById('movCategory');
+  if (cat) {
+    cat.innerHTML = `<option value="all">Todas las categorías</option>
+      <optgroup label="Gastos">${Object.keys(BD_GASTOS).map(m => `<option value="g:${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</optgroup>
+      <optgroup label="Ingresos">${Object.keys(BD_INGRESOS).map(t => `<option value="i:${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}</optgroup>`;
+    cat.addEventListener('change', () => { ui.mov.cat = cat.value; renderMovementsView(); });
+  }
+}
+
+function setPillState(selector, key, value) {
+  document.querySelectorAll(selector).forEach(btn => {
+    const active = btn.dataset[key] === value;
+    btn.classList.toggle('bg-primary', active);
+    btn.classList.toggle('text-on-primary', active);
+    btn.classList.toggle('text-on-surface-variant', !active);
+    btn.setAttribute('aria-pressed', active);
+  });
+}
+
+function renderMovementsView() {
+  const list = document.getElementById('movList');
+  if (!list) return;
+  const f = ui.mov;
+
+  setPillState('#movTypePills [data-type]', 'type', f.type);
+  setPillState('#movPeriodPills [data-period]', 'period', f.period);
+  setText('movPeriodMonth', `${shortMonthLabel(ui.viewMonth)} ${ui.viewMonth.slice(0, 4)}`);
+
+  const [start, end] = f.period === 'mes' ? state.monthBounds(ui.viewMonth) : [null, null];
+  const q = normalizeText(f.q.trim());
+  let all = [
+    ...(f.type !== 'ingreso' ? state.gastosEntre(start, end).map(g => ({ ...g, type: 'gasto' })) : []),
+    ...(f.type !== 'gasto' ? state.ingresosEntre(start, end).map(i => ({ ...i, type: 'ingreso' })) : [])
+  ];
+  if (f.cat !== 'all') {
+    const kind = f.cat.slice(0, 1);
+    const name = f.cat.slice(2);
+    all = all.filter(m => kind === 'g' ? m.type === 'gasto' && m.macroCategoria === name : m.type === 'ingreso' && m.tipoIngreso === name);
+  }
+  if (q) {
+    all = all.filter(m => [m.concepto, shortConcept(m.concepto), m.nota, m.subcategoria, m.macroCategoria, m.tipoIngreso]
+      .some(v => normalizeText(v).includes(q)));
+  }
+  all.sort(sortMovements);
+
+  const gastos = sumValor(all.filter(m => m.type === 'gasto'));
+  const ingresos = sumValor(all.filter(m => m.type === 'ingreso'));
+  setText('movSummaryCount', `${all.length} movimiento${all.length === 1 ? '' : 's'}`);
+  setText('movSummaryExpense', `-${state.formatMoney(gastos, { compact: true })}`);
+  setText('movSummaryIncome', `+${state.formatMoney(ingresos, { compact: true })}`);
+
+  if (all.length === 0) {
+    list.innerHTML = `
+      <div class="p-6 text-center text-on-surface-variant bg-surface-container-lowest rounded-xl space-y-1">
+        <span class="material-symbols-outlined text-[32px] text-outline">search_off</span>
+        <p class="text-body-md">No hay movimientos con esos filtros.</p>
+      </div>`;
+    return;
+  }
+
+  // Agrupados por mes, con el neto de cada uno
+  const MAX = 300;
+  const groups = [];
+  all.slice(0, MAX).forEach(m => {
+    const k = String(m.fecha || '').slice(0, 7);
+    let g = groups[groups.length - 1];
+    if (!g || g.k !== k) groups.push(g = { k, items: [] });
+    g.items.push(m);
+  });
+  list.innerHTML = groups.map(g => {
+    const net = sumValor(g.items.filter(m => m.type === 'ingreso')) - sumValor(g.items.filter(m => m.type === 'gasto'));
+    return `
+      <div class="space-y-2">
+        <div class="flex items-center justify-between px-1 pt-1">
+          <span class="text-label-lg font-bold text-on-surface">${escapeHtml(/^\d{4}-\d{2}$/.test(g.k) ? monthLabel(g.k, true) : 'Sin fecha')}</span>
+          <span class="text-label-md font-semibold ${net < 0 ? 'text-error' : 'text-secondary'}">Neto ${net < 0 ? '' : '+'}${state.formatMoney(net, { compact: true })}</span>
+        </div>
+        ${g.items.map(movementRow).join('')}
+      </div>`;
+  }).join('') + (all.length > MAX ? `<p class="text-center text-[12px] text-outline py-2">Se muestran los ${MAX} más recientes; usa los filtros para acotar.</p>` : '');
 }
 
 function deleteItem(type, id) {
@@ -1261,7 +1389,7 @@ function deleteItem(type, id) {
 }
 
 // --------------------------------------------------------
-// Categorías
+// Catálogo de conceptos (dentro de Presupuesto)
 // --------------------------------------------------------
 function initCategorySearch() {
   const input = document.getElementById('categorySearch');
@@ -1270,155 +1398,51 @@ function initCategorySearch() {
   input.addEventListener('input', () => {
     ui.categorySearch = input.value;
     if (clear) clear.classList.toggle('hidden', !input.value);
-    renderCategoriesView();
+    renderBudgetsView();
   });
   if (clear) {
     clear.addEventListener('click', () => {
       input.value = '';
       ui.categorySearch = '';
       clear.classList.add('hidden');
-      renderCategoriesView();
+      renderBudgetsView();
       input.focus();
     });
   }
 }
 
-function renderCategoriesView() {
-  const container = document.getElementById('categoryFeed');
-  if (!container) return;
+// Subcategorías de una macro que coinciden con la búsqueda (null si nada coincide)
+function filteredSubcategories(macro, conf, q) {
+  let subs = Object.entries(conf.subcategorias);
+  if (!q || normalizeText(macro).includes(q)) return subs;
+  subs = subs
+    .map(([sub, list]) => [sub, normalizeText(sub).includes(q) ? list : list.filter(c => normalizeText(c).includes(q) || normalizeText(shortConcept(c)).includes(q))])
+    .filter(([, list]) => list.length > 0);
+  return subs.length ? subs : null;
+}
 
-  const key = ui.viewMonth;
-  const b = budgetSummary(key);
-  setText('catHeroSpent', state.formatMoney(b.spent));
-  setText('catHeroBudget', `de ${state.formatMoney(b.budget)} presupuestados`);
-  setText('catHeroPct', `${Math.round(b.pctRaw)}% consumido`);
-  setText('catHeroAvailable', b.rem >= 0 ? `${state.formatMoney(b.rem)} disponible` : `Excedido por ${state.formatMoney(-b.rem)}`);
-  setText('catHeroDays', b.isCurrent ? `Faltan ${b.daysLeft} día${b.daysLeft === 1 ? '' : 's'}` : monthLabel(key, true));
-  const heroBar = document.getElementById('catHeroBar');
-  if (heroBar) heroBar.style.width = `${b.pct}%`;
-
-  document.querySelectorAll('#filterPills [data-filter]').forEach(btn => {
-    const active = btn.dataset.filter === ui.categoryFilter;
-    btn.classList.toggle('bg-primary', active);
-    btn.classList.toggle('text-on-primary', active);
-    btn.classList.toggle('shadow-xs', active);
-    btn.classList.toggle('font-semibold', active);
-    btn.classList.toggle('bg-surface-container-lowest', !active);
-    btn.classList.toggle('text-on-surface-variant', !active);
-  });
-
-  const categorias = getCategorias();
-  const macroTotals = state.macroTotals(state.gastosEntre(...state.monthBounds(key)));
-  const q = normalizeText(ui.categorySearch.trim());
-
-  const cards = Object.keys(categorias).map(macro => {
-    const conf = categorias[macro];
-    const limit = state.budgetCOP(macro);
-    if (ui.categoryFilter === 'active' && limit <= 0) return '';
-    if (ui.categoryFilter === 'unlimited' && limit > 0) return '';
-
-    // Filtrado por búsqueda: macro → todo; subcategoría → sus conceptos; concepto → solo coincidencias
-    let subs = Object.entries(conf.subcategorias);
-    if (q && !normalizeText(macro).includes(q)) {
-      subs = subs
-        .map(([sub, list]) => [sub, normalizeText(sub).includes(q) ? list : list.filter(c => normalizeText(c).includes(q))])
-        .filter(([, list]) => list.length > 0);
-      if (subs.length === 0) return '';
-    }
-
-    const spent = macroTotals[macro] || 0;
-    const pctRaw = limit > 0 ? (spent / limit) * 100 : 0;
-    const pct = Math.min(Math.round(pctRaw), 100);
-    const isOver = limit > 0 && pctRaw > 100;
-    const isWarning = limit > 0 && pctRaw >= 85;
-    const rem = limit - spent;
-    const isOpen = q ? true : ui.openAcc.has(macro);
-    const m = escapeHtml(macro);
-
-    return `
-      <div class="category-card bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden transition-all duration-300">
-        <div class="p-space-md">
-          <div class="flex items-start justify-between gap-space-sm">
-            <div class="flex items-center gap-space-sm min-w-0">
-              <div class="w-12 h-12 rounded-xl bg-secondary-container/30 flex items-center justify-center shrink-0 text-secondary">
-                <span class="material-symbols-outlined text-[26px]">${conf.icon}</span>
-              </div>
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  <h2 class="text-headline-sm font-headline-sm text-on-surface truncate">${m}</h2>
-                  ${limit > 0 ? `
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-md font-semibold ${isWarning ? 'bg-error-container text-on-error-container' : 'bg-secondary-container text-on-secondary-container'}">
-                      ${Math.round(pctRaw)}%
-                    </span>
-                  ` : ''}
-                </div>
-                <p class="text-body-sm text-on-surface-variant">${Object.keys(conf.subcategorias).length} subcategorías</p>
-              </div>
-            </div>
-            <div class="flex flex-col items-end shrink-0">
-              <span class="text-data-metric text-on-surface font-semibold">${state.formatMoney(spent)}</span>
-              <span class="text-body-sm text-outline">${limit > 0 ? `Límite ${state.formatMoney(limit)}` : 'Sin límite'}</span>
-            </div>
-          </div>
-
-          ${isWarning ? `
-            <div class="mt-space-sm flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-high text-on-surface">
-              <span class="material-symbols-outlined text-[17px] text-error">warning</span>
-              <span class="text-body-sm font-medium">${isOver ? `Excediste el límite por ${state.formatMoney(-rem)}` : `¡Casi al tope! Te quedan ${state.formatMoney(rem)}`}</span>
-            </div>
-          ` : ''}
-
-          ${limit > 0 ? `
-            <div class="mt-space-sm w-full h-2 rounded-full bg-surface-container-high overflow-hidden">
-              <div class="h-full ${isWarning ? 'bg-error' : 'bg-secondary'} rounded-full transition-all duration-500" style="width: ${pct}%;"></div>
-            </div>
-          ` : ''}
-
-          <button type="button" class="w-full mt-3 pt-2 flex items-center justify-between text-body-sm text-secondary font-semibold hover:underline" data-action="toggle-acc" data-macro="${m}" aria-expanded="${isOpen}">
-            <span class="flex items-center gap-1">
-              <span class="material-symbols-outlined text-[18px]">account_tree</span>
-              Ver subcategorías y conceptos
-            </span>
-            <span class="material-symbols-outlined text-[20px] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}">expand_more</span>
-          </button>
-        </div>
-
-        <div class="${isOpen ? '' : 'hidden'} bg-surface-container-low px-space-md pb-space-md pt-space-xs space-y-2.5">
-          ${subs.map(([sub, list]) => `
-            <div class="p-2.5 bg-surface-container-lowest rounded-lg shadow-xs">
-              <div class="flex items-center justify-between">
-                <span class="text-body-md font-semibold text-on-surface">${escapeHtml(sub)}</span>
-                <span class="text-[11px] px-2 py-0.5 rounded bg-surface-container-high text-primary font-medium">${list.length} concepto${list.length === 1 ? '' : 's'}</span>
-              </div>
-              <div class="flex flex-wrap gap-1.5 mt-1.5">
-                ${list.map(c => {
-                  const attrs = `data-macro="${m}" data-sub="${escapeHtml(sub)}" data-concepto="${escapeHtml(c)}"`;
-                  const custom = isCustomConcept(macro, sub, c);
-                  return `
-                    <span class="inline-flex items-center gap-0.5 text-body-sm rounded ${custom ? 'bg-secondary-container/40 text-on-secondary-container' : 'bg-surface-container text-on-surface-variant'}">
-                      <button type="button" data-action="use-concept" ${attrs} class="px-2 py-0.5 text-left hover:text-primary" title="Registrar un gasto con este concepto">${escapeHtml(c)}</button>
-                      ${custom ? `<button type="button" data-action="remove-concept" ${attrs} class="pr-1.5 leading-none hover:text-error" aria-label="Quitar concepto"><span class="material-symbols-outlined text-[14px] align-middle">close</span></button>` : ''}
-                    </span>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          `).join('')}
-          <div class="pt-1">
-            <button type="button" data-action="goto" data-view="presupuestos" class="px-3 py-1.5 bg-surface-container-lowest text-secondary rounded-lg text-label-md font-semibold shadow-xs hover:bg-surface-container">
-              Editar presupuesto de ${m}
-            </button>
-          </div>
-        </div>
+function conceptsBlock(macro, subs) {
+  const m = escapeHtml(macro);
+  return subs.map(([sub, list]) => `
+    <div class="p-2.5 bg-surface-container-lowest rounded-lg shadow-xs">
+      <div class="flex items-center justify-between">
+        <span class="text-body-md font-semibold text-on-surface">${escapeHtml(sub)}</span>
+        <span class="text-[11px] px-2 py-0.5 rounded bg-surface-container-high text-primary font-medium">${list.length} concepto${list.length === 1 ? '' : 's'}</span>
       </div>
-    `;
-  }).join('');
-
-  container.innerHTML = cards.trim() || `
-    <div class="p-6 text-center text-on-surface-variant bg-surface-container-lowest rounded-xl">
-      <p class="text-body-md">No hay categorías que coincidan.</p>
+      <div class="flex flex-wrap gap-1.5 mt-1.5">
+        ${list.map(c => {
+          const attrs = `data-macro="${m}" data-sub="${escapeHtml(sub)}" data-concepto="${escapeHtml(c)}"`;
+          const custom = isCustomConcept(macro, sub, c);
+          return `
+            <span class="inline-flex items-center gap-0.5 text-body-sm rounded ${custom ? 'bg-secondary-container/40 text-on-secondary-container' : 'bg-surface-container text-on-surface-variant'}">
+              <button type="button" data-action="use-concept" ${attrs} class="px-2 py-0.5 text-left hover:text-primary" title="${escapeHtml(c)} · tocar para registrar">${escapeHtml(shortConcept(c))}</button>
+              ${custom ? `<button type="button" data-action="remove-concept" ${attrs} class="pr-1.5 leading-none hover:text-error" aria-label="Quitar concepto"><span class="material-symbols-outlined text-[14px] align-middle">close</span></button>` : ''}
+            </span>
+          `;
+        }).join('')}
+      </div>
     </div>
-  `;
+  `).join('');
 }
 
 function useConcept(macro, sub, concepto) {
@@ -1518,9 +1542,14 @@ function renderBudgetsView() {
   if (heroBar) heroBar.style.width = `${b.pct}%`;
 
   const macroTotals = state.macroTotals(state.gastosEntre(...state.monthBounds(key)));
+  const categorias = getCategorias();
+  const q = normalizeText(ui.categorySearch.trim());
 
-  container.innerHTML = Object.keys(BD_GASTOS).map(macro => {
-    const conf = BD_GASTOS[macro];
+  const cards = Object.keys(BD_GASTOS).map(macro => {
+    const conf = categorias[macro];
+    const subs = filteredSubcategories(macro, conf, q);
+    if (!subs) return '';
+    const isOpen = q ? true : ui.openAcc.has(macro);
     const limit = state.budgetCOP(macro);
     const spent = macroTotals[macro] || 0;
     const pctRaw = limit > 0 ? (spent / limit) * 100 : 0;
@@ -1557,13 +1586,29 @@ function renderBudgetsView() {
             Límite
             <span class="relative">
               <span class="absolute left-2 top-1/2 -translate-y-1/2 text-outline text-[12px]">${displayCurrency() === 'CAD' ? 'CA$' : '$'}</span>
-              <input type="number" inputmode="decimal" min="0" step="any" data-budget="${m}" value="${budgetInputValue(macro)}" class="w-32 h-9 pl-9 pr-2 rounded-lg bg-surface-container-low border border-slate-200 text-right text-on-surface font-semibold outline-none focus:ring-2 focus:ring-secondary" aria-label="Presupuesto mensual de ${m}"/>
+              <input type="number" inputmode="decimal" min="0" step="any" data-budget="${m}" value="${budgetInputValue(macro)}" class="w-28 h-9 pl-9 pr-2 rounded-lg bg-surface-container-low border border-slate-200 text-right text-on-surface font-semibold outline-none focus:ring-2 focus:ring-secondary" aria-label="Presupuesto mensual de ${m}"/>
             </span>
           </label>
+        </div>
+        <button type="button" class="w-full pt-1 flex items-center justify-between text-body-sm text-secondary font-semibold" data-action="toggle-acc" data-macro="${m}" aria-expanded="${isOpen}">
+          <span class="flex items-center gap-1">
+            <span class="material-symbols-outlined text-[18px]">account_tree</span>
+            ${Object.keys(conf.subcategorias).length} subcategorías y sus conceptos
+          </span>
+          <span class="material-symbols-outlined text-[20px] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}">expand_more</span>
+        </button>
+        <div class="${isOpen ? '' : 'hidden'} -mx-space-md -mb-space-md px-space-md pb-space-md pt-2 bg-surface-container-low rounded-b-xl space-y-2">
+          ${conceptsBlock(macro, subs)}
         </div>
       </div>
     `;
   }).join('');
+
+  container.innerHTML = cards.trim() || `
+    <div class="p-6 text-center text-on-surface-variant bg-surface-container-lowest rounded-xl">
+      <p class="text-body-md">No hay categorías ni conceptos que coincidan.</p>
+    </div>
+  `;
 }
 
 // Límite en la moneda que se está mostrando, para el campo editable
@@ -1724,7 +1769,7 @@ function renderTopConcepts(gastos, totalSpent) {
     : top.map(([name, v], i) => `
       <div class="space-y-1">
         <div class="flex items-center justify-between gap-2 text-body-sm">
-          <span class="text-on-surface font-medium truncate">${i + 1}. ${escapeHtml(name)}</span>
+          <span class="text-on-surface font-medium truncate">${i + 1}. ${escapeHtml(shortConcept(name))}</span>
           <span class="text-on-surface font-semibold shrink-0">${state.formatMoney(v.amt)}</span>
         </div>
         <div class="flex items-center gap-2">
@@ -1936,7 +1981,7 @@ function renderRecurringCard() {
           <span class="material-symbols-outlined text-[18px]">${recurringIcon(tpl)}</span>
         </div>
         <div class="min-w-0">
-          <p class="text-body-sm font-semibold text-on-surface truncate">${escapeHtml(tpl.datos.concepto)}</p>
+          <p class="text-body-sm font-semibold text-on-surface truncate">${escapeHtml(shortConcept(tpl.datos.concepto))}</p>
           <p class="text-[11px] text-on-surface-variant truncate">${tpl.type === 'gasto' ? '-' : '+'}${recurringAmountText(tpl)} · ${escapeHtml(formatDisplayDate(recurringDueDate(tpl, monthKey)))}${count > 1 ? ` · ${count} meses pendientes` : ''}</p>
         </div>
       </div>
@@ -1966,7 +2011,7 @@ function renderRecurringModal() {
             <div class="flex items-center gap-2 min-w-0">
               <span class="material-symbols-outlined text-[20px] text-secondary">${recurringIcon(tpl)}</span>
               <div class="min-w-0">
-                <p class="text-body-sm font-semibold text-on-surface truncate">${escapeHtml(tpl.datos.concepto)}</p>
+                <p class="text-body-sm font-semibold text-on-surface truncate">${escapeHtml(shortConcept(tpl.datos.concepto))}</p>
                 <p class="text-[11px] text-on-surface-variant">${tpl.type === 'gasto' ? 'Gasto' : 'Ingreso'} · día ${tpl.dia} de cada mes${tpl.activo ? '' : ' · en pausa'}</p>
               </div>
             </div>
@@ -2000,14 +2045,14 @@ function handleRecurringAction(action, tplId, monthKey) {
   switch (action) {
     case 'rec-register':
       createRecurring(tpl, monthKey);
-      showToast(`${tpl.datos.concepto}: ${recurringAmountText(tpl)} registrado`);
+      showToast(`${shortConcept(tpl.datos.concepto)}: ${recurringAmountText(tpl)} registrado`);
       break;
     case 'rec-edit':
       startFromTemplate(tplId, monthKey);
       return;
     case 'rec-skip':
       markRecurringDone(tpl, monthKey);
-      showToast(`${tpl.datos.concepto} omitido en ${monthLabel(monthKey).toLowerCase()}`, 'info');
+      showToast(`${shortConcept(tpl.datos.concepto)} omitido en ${monthLabel(monthKey).toLowerCase()}`, 'info');
       break;
     case 'rec-toggle-mode':
       tpl.modo = tpl.modo === 'auto' ? 'proponer' : 'auto';
@@ -2204,7 +2249,7 @@ function renderFormSelectors() {
   if (!form.concepto) form.concepto = conceptos[0] || '';
   const select = document.getElementById('regConceptoSelect');
   if (select) {
-    select.innerHTML = conceptos.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    select.innerHTML = conceptos.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(shortConcept(c))}</option>`).join('');
     select.value = form.concepto;
   }
 
@@ -2666,6 +2711,7 @@ function updateConverterUI() {
   if (liveRateDisplay) {
     liveRateDisplay.textContent = `1 CAD = $${Math.round(rate).toLocaleString('es-CO')} COP`;
   }
+  setText('converterHeaderRate', `1 CAD = $${Math.round(rate).toLocaleString('es-CO')} COP`);
 
   if (rateTimestamp) {
     if (CONVERTER_STATE.lastUpdated) {
