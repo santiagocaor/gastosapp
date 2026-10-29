@@ -586,7 +586,8 @@ class AppState {
       const res = await fetch(this.data.googleScriptUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(this.data.sheetsToken ? { ...body, token: this.data.sheetsToken } : body)
+        // fx: tasa CAD→COP de hoy; el script v4 la usa para guardar la hoja en CAD
+        body: JSON.stringify({ ...body, fx: Math.round(cadRate() * 100) / 100, ...(this.data.sheetsToken ? { token: this.data.sheetsToken } : {}) })
       });
       const data = await res.json();
       if (!data || data.ok !== true) console.warn('Google Sheets respondió con error:', data);
@@ -689,6 +690,7 @@ class AppState {
           if (!det.protocol) throw new Error(det.error);
         }
 
+        await ensureFreshRate();
         await this.resendPending();
 
         let remote;
@@ -1759,8 +1761,8 @@ function computeAlerts() {
   if (pending > 0 && state.data.googleScriptUrl) {
     alerts.push({ level: 'info', icon: 'cloud_off', title: 'Cambios sin sincronizar', text: `${pending} cambio(s) aún no llegan a Google Sheets. Se reintentará al recuperar la conexión.` });
   }
-  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 3) {
-    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v3)', text: 'La nueva versión de apps-script/Code.gs guarda en la hoja la moneda original (CAD) y la tasa de cada movimiento.' });
+  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 4) {
+    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v4)', text: 'La nueva versión de apps-script/Code.gs guarda tu Google Sheet en CAD, con la moneda original y la tasa de cada movimiento.' });
   }
   if (state.data.googleScriptUrl && state.data.sheetsProtocol === 1) {
     alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script', text: 'Con el script antiguo, editar o borrar no llega a Google Sheets. Reemplázalo por apps-script/Code.gs para sincronizar en ambos sentidos.' });
@@ -2563,6 +2565,13 @@ function initCurrencyConverter() {
   calculateConversion();
   // Obtener cotización fresca en vivo al cargar la aplicación
   fetchLiveExchangeRate(false);
+}
+
+// Antes de sincronizar con Sheets se usa una tasa del día (se pide si la guardada tiene más de 6 h)
+async function ensureFreshRate() {
+  const last = CONVERTER_STATE.lastUpdated;
+  if (last && Date.now() - last.getTime() < 6 * 60 * 60 * 1000) return;
+  await fetchLiveExchangeRate(false);
 }
 
 async function fetchLiveExchangeRate(isManualRefresh = false) {

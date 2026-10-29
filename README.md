@@ -52,6 +52,8 @@ La sincronización es **en ambos sentidos**: lo que crees, edites o borres en la
 
 ### Instalar el script
 
+> Haz una copia de la hoja antes de pasar a la v4 (*Archivo → Hacer una copia*): la primera sincronización convierte la columna Valor a CAD.
+
 1. Abre tu hoja **BDGastosApp** → *Extensiones* → *Apps Script*.
 2. **Guarda una copia de tu script actual** (por si acaso) y reemplaza el contenido de `Code.gs` por [`apps-script/Code.gs`](apps-script/Code.gs).
 3. Si tus pestañas no se llaman `Registro de Gastos` y `Registro de Ingresos`, ajusta `CONFIG.SHEETS` al inicio del archivo.
@@ -62,8 +64,11 @@ Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del sc
 
 ### Cómo funciona
 
-- El script agrega al final de cada pestaña las columnas **ID**, **Moneda**, **Monto original** y **Tasa CAD→COP** (sin mover las demás; se buscan por encabezado) y asigna un id a las filas antiguas, así todo se puede editar y borrar. **Valor** sigue en COP.
-- Si tu script es la v2, la app sigue funcionando y conserva la moneda en el dispositivo, pero avisa para actualizarlo a la v3 y guardarla también en la hoja.
+- **La hoja está en CAD.** La columna **Valor (CAD)** guarda el monto en dólares canadienses; al final de cada pestaña se agregan **ID**, **Moneda** (en qué moneda se registró), **Monto original** (en esa moneda) y **Tasa CAD→COP** (se buscan por encabezado, así que puedes moverlas).
+- **Migración automática (una vez):** al sincronizar por primera vez con el script v4, las filas que estaban en COP se convierten a CAD con la tasa del día; su monto exacto en COP queda en *Monto original*. Las registradas en CAD recuperan su monto original exacto.
+- **Puedes editar la hoja a mano:** *Valor (CAD)* manda. Si lo cambias, la app ajusta el monto original; una fila nueva escrita a mano se toma como CAD y recibe su id.
+- Hacia la app el script entrega el valor en COP y en CAD, así una versión vieja de la app abierta en otro dispositivo no muestra cifras erradas.
+- Con un script anterior (v2/v3) la app sigue funcionando, pero avisa para actualizarlo a la v4.
 - La app envía `POST` con JSON en `text/plain` (sin preflight CORS), lee la respuesta y solo marca un cambio como enviado cuando el script confirma `ok`.
 - Sin conexión, los cambios quedan **pendientes** (☁️ tachado) y se envían solos al volver la red o al abrir la app; también con *Reenviar pendientes*.
 - La app se sincroniza sola al abrirse y al volver a ella (como máximo cada 2 minutos), o con *Sincronizar ahora*.
