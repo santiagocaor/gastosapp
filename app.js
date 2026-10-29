@@ -299,6 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initFormSelectors();
   initPrivacyToggle();
   initSheetsConfigModal();
+  initCurrencyConverter();
   renderAll();
 });
 
@@ -958,5 +959,243 @@ window.setTransactionType = function(type) {
     }
   });
 };
+
+// ========================================================
+// CONVERSOR DE DIVISAS (COP ⇄ CAD) EN TIEMPO REAL
+// ========================================================
+const CONVERTER_STATE = {
+  direction: 'COP_TO_CAD', // 'COP_TO_CAD' | 'CAD_TO_COP'
+  rateCadToCop: 2240.24,   // Tasa de partida estimada
+  lastUpdated: null,
+  isLoading: false
+};
+
+// Cargar tasa guardada en caché si existe
+try {
+  const savedRate = localStorage.getItem('gastosapp_cad_cop_rate');
+  if (savedRate) {
+    const parsed = JSON.parse(savedRate);
+    if (parsed.rate > 0) {
+      CONVERTER_STATE.rateCadToCop = parsed.rate;
+      CONVERTER_STATE.lastUpdated = new Date(parsed.timestamp);
+    }
+  }
+} catch (e) {
+  console.warn('Error al leer tasa guardada en caché:', e);
+}
+
+function initCurrencyConverter() {
+  updateConverterUI();
+  calculateConversion();
+  // Obtener cotización fresca en vivo al cargar la aplicación
+  fetchLiveExchangeRate(false);
+}
+
+async function fetchLiveExchangeRate(isManualRefresh = false) {
+  const refreshIcon = document.getElementById('refreshIcon');
+  if (refreshIcon) refreshIcon.classList.add('animate-spin');
+  CONVERTER_STATE.isLoading = true;
+
+  try {
+    // API primaria: open.er-api.com (sin API key, tasas oficiales de mercado, alta velocidad)
+    const res = await fetch('https://open.er-api.com/v6/latest/CAD');
+    if (!res.ok) throw new Error('Error en API primaria');
+    const data = await res.json();
+    
+    if (data && data.rates && data.rates.COP) {
+      CONVERTER_STATE.rateCadToCop = parseFloat(data.rates.COP);
+      CONVERTER_STATE.lastUpdated = new Date();
+      localStorage.setItem('gastosapp_cad_cop_rate', JSON.stringify({
+        rate: CONVERTER_STATE.rateCadToCop,
+        timestamp: CONVERTER_STATE.lastUpdated.toISOString()
+      }));
+
+      updateConverterUI();
+      calculateConversion();
+      if (isManualRefresh) {
+        showToast(`Cotización actualizada: 1 CAD = $${Math.round(CONVERTER_STATE.rateCadToCop).toLocaleString('es-CO')} COP`);
+      }
+      return;
+    }
+  } catch (err) {
+    console.warn('Intentando API secundaria de respaldo...', err);
+    try {
+      // API secundaria (Fallback): exchangerate-api.com
+      const resFallback = await fetch('https://api.exchangerate-api.com/v4/latest/CAD');
+      const dataFallback = await resFallback.json();
+      if (dataFallback && dataFallback.rates && dataFallback.rates.COP) {
+        CONVERTER_STATE.rateCadToCop = parseFloat(dataFallback.rates.COP);
+        CONVERTER_STATE.lastUpdated = new Date();
+        localStorage.setItem('gastosapp_cad_cop_rate', JSON.stringify({
+          rate: CONVERTER_STATE.rateCadToCop,
+          timestamp: CONVERTER_STATE.lastUpdated.toISOString()
+        }));
+
+        updateConverterUI();
+        calculateConversion();
+        if (isManualRefresh) {
+          showToast(`Cotización actualizada: 1 CAD = $${Math.round(CONVERTER_STATE.rateCadToCop).toLocaleString('es-CO')} COP`);
+        }
+        return;
+      }
+    } catch (err2) {
+      console.error('Error al consultar tasas de cambio:', err2);
+      if (isManualRefresh) {
+        showToast('No se pudo actualizar la tasa; usando última tasa guardada.');
+      }
+    }
+  } finally {
+    CONVERTER_STATE.isLoading = false;
+    if (refreshIcon) {
+      setTimeout(() => refreshIcon.classList.remove('animate-spin'), 600);
+    }
+  }
+}
+
+function updateConverterUI() {
+  const isCopToCad = CONVERTER_STATE.direction === 'COP_TO_CAD';
+  const modeCopBtn = document.getElementById('modeCopToCad');
+  const modeCadBtn = document.getElementById('modeCadToCop');
+  const inputLabel = document.getElementById('converterInputLabel');
+  const outputLabel = document.getElementById('converterOutputLabel');
+  const prefix = document.getElementById('converterCurrencyPrefix');
+  const liveRateDisplay = document.getElementById('liveRateDisplay');
+  const rateTimestamp = document.getElementById('rateTimestamp');
+
+  // Estilos de botones de dirección
+  if (modeCopBtn && modeCadBtn) {
+    if (isCopToCad) {
+      modeCopBtn.className = "flex-1 py-1.5 px-2 rounded-lg text-label-md font-semibold text-center transition-all bg-primary text-on-primary shadow-xs cursor-pointer flex items-center justify-center gap-1";
+      modeCadBtn.className = "flex-1 py-1.5 px-2 rounded-lg text-label-md font-semibold text-center transition-all text-on-surface-variant hover:text-on-surface cursor-pointer flex items-center justify-center gap-1";
+    } else {
+      modeCadBtn.className = "flex-1 py-1.5 px-2 rounded-lg text-label-md font-semibold text-center transition-all bg-primary text-on-primary shadow-xs cursor-pointer flex items-center justify-center gap-1";
+      modeCopBtn.className = "flex-1 py-1.5 px-2 rounded-lg text-label-md font-semibold text-center transition-all text-on-surface-variant hover:text-on-surface cursor-pointer flex items-center justify-center gap-1";
+    }
+  }
+
+  if (inputLabel) inputLabel.textContent = isCopToCad ? 'Monto en COP ($)' : 'Monto en CAD ($)';
+  if (outputLabel) outputLabel.textContent = isCopToCad ? 'Equivalente en CAD' : 'Equivalente en COP';
+  if (prefix) prefix.textContent = isCopToCad ? 'COP $' : 'CAD $';
+
+  const rate = CONVERTER_STATE.rateCadToCop;
+  if (liveRateDisplay) {
+    liveRateDisplay.textContent = `1 CAD = $${Math.round(rate).toLocaleString('es-CO')} COP`;
+  }
+
+  if (rateTimestamp) {
+    if (CONVERTER_STATE.lastUpdated) {
+      const timeStr = CONVERTER_STATE.lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      rateTimestamp.textContent = `Tasa en vivo (${timeStr})`;
+    } else {
+      rateTimestamp.textContent = `Tasa en vivo al instante`;
+    }
+  }
+
+  renderConverterPresets();
+}
+
+function renderConverterPresets() {
+  const container = document.getElementById('converterPresetChips');
+  if (!container) return;
+
+  const isCopToCad = CONVERTER_STATE.direction === 'COP_TO_CAD';
+  const presets = isCopToCad
+    ? [
+        { label: '$50k COP', val: 50000 },
+        { label: '$100k COP', val: 100000 },
+        { label: '$200k COP', val: 200000 },
+        { label: '$500k COP', val: 500000 },
+        { label: '$1M COP', val: 1000000 }
+      ]
+    : [
+        { label: '$25 CAD', val: 25 },
+        { label: '$50 CAD', val: 50 },
+        { label: '$100 CAD', val: 100 },
+        { label: '$250 CAD', val: 250 },
+        { label: '$500 CAD', val: 500 }
+      ];
+
+  container.innerHTML = presets.map(p => `
+    <button onclick="setConverterValue(${p.val})" class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant hover:text-primary hover:bg-surface-container-high transition-colors font-medium whitespace-nowrap cursor-pointer text-[11px]" type="button">
+      ${p.label}
+    </button>
+  `).join('');
+}
+
+function calculateConversion() {
+  const inputEl = document.getElementById('converterInput');
+  const outputEl = document.getElementById('converterOutputValue');
+  if (!inputEl || !outputEl) return;
+
+  const rawVal = parseFloat(inputEl.value) || 0;
+  const rate = CONVERTER_STATE.rateCadToCop;
+
+  if (CONVERTER_STATE.direction === 'COP_TO_CAD') {
+    // COP a CAD
+    const cadVal = rawVal > 0 && rate > 0 ? (rawVal / rate) : 0;
+    outputEl.textContent = `$${cadVal.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CAD`;
+  } else {
+    // CAD a COP
+    const copVal = rawVal > 0 ? (rawVal * rate) : 0;
+    outputEl.textContent = `$${Math.round(copVal).toLocaleString('es-CO')} COP`;
+  }
+}
+
+window.setConversionDirection = function(dir) {
+  CONVERTER_STATE.direction = dir;
+  const input = document.getElementById('converterInput');
+  if (input) {
+    // Valor inicial coherente al cambiar dirección
+    input.value = dir === 'COP_TO_CAD' ? '100000' : '50';
+  }
+  updateConverterUI();
+  calculateConversion();
+};
+
+window.toggleConversionDirection = function() {
+  const newDir = CONVERTER_STATE.direction === 'COP_TO_CAD' ? 'CAD_TO_COP' : 'COP_TO_CAD';
+  window.setConversionDirection(newDir);
+};
+
+window.setConverterValue = function(val) {
+  const input = document.getElementById('converterInput');
+  if (input) {
+    input.value = val;
+    calculateConversion();
+  }
+};
+
+window.copyConversionResult = function() {
+  const outputEl = document.getElementById('converterOutputValue');
+  if (outputEl) {
+    const text = outputEl.textContent.trim();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text);
+    }
+    showToast(`Copiado: ${text}`);
+  }
+};
+
+// Atajo en formulario de Registrar: permite ingresar en CAD y se convierte al instante a COP
+window.quickConvertCadToCopPrompt = async function() {
+  // Asegurar que tengamos la tasa más fresca del momento
+  if (!CONVERTER_STATE.lastUpdated || (Date.now() - CONVERTER_STATE.lastUpdated.getTime() > 1000 * 60 * 30)) {
+    await fetchLiveExchangeRate(false);
+  }
+
+  const cadInput = prompt(`Cotización actual: 1 CAD = $${Math.round(CONVERTER_STATE.rateCadToCop).toLocaleString('es-CO')} COP\n\nIngresa el monto en Dólares Canadienses (CAD):`, "50");
+  if (cadInput !== null) {
+    const val = parseFloat(cadInput.replace(/,/g, '.'));
+    if (!isNaN(val) && val > 0) {
+      const copTotal = Math.round(val * CONVERTER_STATE.rateCadToCop);
+      const input = document.getElementById('expenseAmountInput');
+      if (input) {
+        input.value = copTotal;
+        showToast(`$${val} CAD convertidos a $${copTotal.toLocaleString('es-CO')} COP`);
+      }
+    }
+  }
+};
+
 
 
