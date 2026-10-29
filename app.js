@@ -93,6 +93,10 @@ const DEFAULT_STATE = {
   balanceHidden: false,
   activeTab: 'inicio',
   googleScriptUrl: '', // URL del Webhook de Google Apps Script
+  sheetsToken: '',     // clave opcional configurada en el script (CONFIG.TOKEN)
+  sheetsProtocol: 0,   // 0 desconocido · 1 script antiguo (solo crear) · 2 sincronización completa
+  pendingDeletes: [],  // [{ type, id }] borrados que aún no llegan a Sheets
+  lastPull: 0,
   presupuestos: { ...PRESUPUESTOS_DEFAULT },
   customCategorias: {}, // { macro: { subcategoria: [conceptos] } } añadidos desde la app
   gastos: [],
@@ -182,6 +186,15 @@ function formatDisplayDate(fecha) {
 function inRange(fecha, start, end) {
   if (!isIsoDate(fecha)) return start === null && end === null;
   return (start === null || fecha >= start) && (end === null || fecha < end);
+}
+
+// Monto desde Sheets: número o texto como "3.200.000" / "3,200,000.50"
+function toAmount(v) {
+  if (typeof v === 'number') return v;
+  let s = String(v ?? '').replace(/[^0-9.,-]+/g, '');
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+  else s = s.replace(/,/g, '');
+  return Number(s) || 0;
 }
 
 function sumValor(items) {
@@ -316,6 +329,10 @@ class AppState {
     if (!d.customCategorias || typeof d.customCategorias !== 'object') d.customCategorias = {};
     if (!d.currency) d.currency = { ...DEFAULT_STATE.currency };
     if (typeof d.googleScriptUrl !== 'string') d.googleScriptUrl = '';
+    if (typeof d.sheetsToken !== 'string') d.sheetsToken = '';
+    if (![0, 1, 2].includes(d.sheetsProtocol)) d.sheetsProtocol = 0;
+    if (!Array.isArray(d.pendingDeletes)) d.pendingDeletes = [];
+    if (typeof d.lastPull !== 'number') d.lastPull = 0;
   }
 
   save() {
@@ -389,7 +406,8 @@ class AppState {
         subcategory: item.subcategoria,
         concept: item.concepto,
         amount: item.valor,
-        paymentMethod: item.nota || ""
+        note: item.nota || "",
+        paymentMethod: item.nota || "" // nombre que usaba el script antiguo
       };
     }
     return {
@@ -399,6 +417,7 @@ class AppState {
       incomeType: item.tipoIngreso,
       concept: item.concepto,
       amount: item.valor,
+      note: item.nota || "",
       paymentMethod: item.nota || ""
     };
   }
@@ -421,20 +440,30 @@ class AppState {
     const item = this.find(type, id);
     if (!item) return null;
     Object.assign(item, changes);
+    // Con el script v2 la edición también se envía a Sheets
+    if (this.isFullSync()) item.synced = false;
     this.save();
     return item;
   }
 
   deleteMovement(type, id) {
+    const item = this.find(type, id);
     if (type === 'gasto') this.data.gastos = this.data.gastos.filter(g => g.id !== id);
     else this.data.ingresos = this.data.ingresos.filter(i => i.id !== id);
+    if (item && item.remote && this.isFullSync()) this.data.pendingDeletes.push({ type, id });
     this.save();
   }
 
   clearAllMovements() {
     this.data.gastos = [];
     this.data.ingresos = [];
+    this.data.pendingDeletes = [];
     this.save();
+  }
+
+  // true cuando el Apps Script soporta editar y borrar (protocolo v2)
+  isFullSync() {
+    return !!this.data.googleScriptUrl && this.data.sheetsProtocol === 2;
   }
 
   getPending() {
@@ -444,23 +473,62 @@ class AppState {
     ];
   }
 
+  pendingCount() {
+    return this.getPending().length + (this.isFullSync() ? this.data.pendingDeletes.length : 0);
+  }
+
   async syncItem(type, item) {
-    if (await this.syncToGoogleSheets(this.payload(type, item))) {
+    const ok = this.isFullSync()
+      ? (await this.callSheets({ action: 'upsert', ...this.payload(type, item) })).ok
+      : await this.legacyPost(this.payload(type, item));
+    if (ok) {
       item.synced = true;
+      if (this.isFullSync()) item.remote = true;
       this.save();
+    }
+    return ok;
+  }
+
+  // Envía borrados y registros pendientes; devuelve cuántos cambios siguen sin enviarse
+  async resendPending() {
+    if (!this.data.googleScriptUrl) return this.pendingCount();
+    if (this.isFullSync()) {
+      for (const d of [...this.data.pendingDeletes]) {
+        const r = await this.callSheets({ action: 'delete', type: d.type, id: d.id });
+        if (r.ok) {
+          this.data.pendingDeletes = this.data.pendingDeletes.filter(p => !(p.type === d.type && p.id === d.id));
+          this.save();
+        } else if (r.network) {
+          break;
+        }
+      }
+    }
+    for (const p of this.getPending()) {
+      if (!(await this.syncItem(p.type, p.item)) && !this.isFullSync()) break;
+    }
+    return this.pendingCount();
+  }
+
+  // Protocolo v2: POST con JSON en text/plain (petición "simple", sin preflight CORS),
+  // así la app puede leer la respuesta del script y saber si guardó.
+  async callSheets(body) {
+    try {
+      const res = await fetch(this.data.googleScriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(this.data.sheetsToken ? { ...body, token: this.data.sheetsToken } : body)
+      });
+      const data = await res.json();
+      if (!data || data.ok !== true) console.warn('Google Sheets respondió con error:', data);
+      return data || { ok: false, error: 'Respuesta vacía' };
+    } catch (err) {
+      console.error('Error al comunicarse con Google Sheets:', err);
+      return { ok: false, error: 'Sin conexión con Google Sheets', network: true };
     }
   }
 
-  // Reintenta los registros pendientes; devuelve cuántos siguen sin enviarse
-  async resendPending() {
-    if (!this.data.googleScriptUrl) return this.getPending().length;
-    await Promise.all(this.getPending().map(p => this.syncItem(p.type, p.item)));
-    return this.getPending().length;
-  }
-
-  // Devuelve true si la petición salió. Con no-cors la respuesta es opaca, así que
-  // solo se detectan fallos de red, no errores del script.
-  async syncToGoogleSheets(payload) {
+  // Script antiguo: POST no-cors. La respuesta es opaca, así que solo se detectan fallos de red.
+  async legacyPost(payload) {
     try {
       await fetch(this.data.googleScriptUrl, {
         method: "POST",
@@ -475,63 +543,119 @@ class AppState {
     }
   }
 
-  async fetchFromGoogleSheets() {
-    if (!this.data.googleScriptUrl) {
-      showToast("Configura primero la URL de tu Google Apps Script", 'error');
-      return;
-    }
+  // Averigua qué versión del script hay detrás de la URL. Se usa GET para no enviarle
+  // al script antiguo un POST que no entiende (podría crear filas vacías).
+  async detectProtocol() {
+    let data = null;
     try {
-      showToast("Descargando registros desde Google Sheets...", 'info');
       const res = await fetch(this.data.googleScriptUrl);
-      const data = await res.json();
-      if (!data) return;
-
-      // Registros locales que aún no llegaron a Sheets: se conservan y se reintentan
-      const pendingGastos = this.data.gastos.filter(g => g.synced === false);
-      const pendingIngresos = this.data.ingresos.filter(i => i.synced === false);
-
-      // Gastos: omitir fila 0 de encabezados
-      if (Array.isArray(data.gastos)) {
-        this.data.gastos = data.gastos.slice(1).filter(r => r[0] && r[1]).map((r, i) => ({
-          id: "tx_g_gs_" + i,
-          fecha: normalizeSheetDate(r[0]),
-          valor: Number(String(r[1]).replace(/[^0-9.-]+/g, "")) || 0,
-          macroCategoria: r[2] || "Necesidades",
-          subcategoria: r[3] || "Varios",
-          concepto: r[4] || "",
-          nota: r[5] || "",
-          synced: true
-        }));
-        this.data.gastos.unshift(...pendingGastos);
-      }
-      // Ingresos: omitir fila 0 de encabezados
-      if (Array.isArray(data.ingresos)) {
-        this.data.ingresos = data.ingresos.slice(1).filter(r => r[0] && r[1]).map((r, i) => ({
-          id: "tx_i_gs_" + i,
-          fecha: normalizeSheetDate(r[0]),
-          valor: Number(String(r[1]).replace(/[^0-9.-]+/g, "")) || 0,
-          tipoIngreso: r[2] || "Laboral",
-          concepto: r[3] || "",
-          nota: r[4] || "",
-          synced: true
-        }));
-        this.data.ingresos.unshift(...pendingIngresos);
-      }
-      this.save();
-      renderAll();
-
-      const pendingCount = pendingGastos.length + pendingIngresos.length;
-      if (pendingCount > 0) {
-        const left = await this.resendPending();
-        renderAll();
-        showToast(`Datos sincronizados; se reenviaron ${pendingCount - left} de ${pendingCount} pendientes`);
-      } else {
-        showToast("¡Datos sincronizados con éxito desde Google Sheets!");
-      }
+      data = await res.json();
     } catch (err) {
-      console.error("Error al cargar de Google Sheets:", err);
-      showToast("Error al leer desde Google Sheets", 'error');
+      console.error('No se pudo consultar el script:', err);
+      return { protocol: this.data.sheetsProtocol || 0, error: 'No se pudo conectar con el script' };
     }
+
+    let protocol = 0;
+    let error = null;
+    if (data && data.version >= 2) {
+      protocol = 2;
+    } else if (data && data.ok === false && /clave/i.test(data.error || '')) {
+      // Script v2 con clave: se confirma por POST
+      const ping = await this.callSheets({ action: 'ping' });
+      if (ping.ok) protocol = 2;
+      else error = ping.error || 'Clave incorrecta';
+    } else if (data && Array.isArray(data.gastos)) {
+      protocol = 1;
+    } else {
+      error = 'La URL no responde como el script de GastosApp';
+    }
+
+    if (protocol) {
+      this.data.sheetsProtocol = protocol;
+      this.save();
+    }
+    return { protocol, error };
+  }
+
+  remoteToLocal(type, r, i) {
+    if (Array.isArray(r)) {
+      // Script antiguo: filas sin id
+      return type === 'gasto'
+        ? { id: "tx_g_gs_" + i, fecha: normalizeSheetDate(r[0]), valor: toAmount(r[1]), macroCategoria: r[2] || "Necesidades", subcategoria: r[3] || "Varios", concepto: r[4] || "", nota: r[5] || "", synced: true }
+        : { id: "tx_i_gs_" + i, fecha: normalizeSheetDate(r[0]), valor: toAmount(r[1]), tipoIngreso: r[2] || "Laboral", concepto: r[3] || "", nota: r[4] || "", synced: true };
+    }
+    const base = { id: String(r.id), fecha: normalizeSheetDate(String(r.fecha || '')), valor: toAmount(r.valor), concepto: r.concepto || "", nota: r.nota || "", synced: true, remote: true };
+    return type === 'gasto'
+      ? { ...base, macroCategoria: r.macroCategoria || "Necesidades", subcategoria: r.subcategoria || "Varios" }
+      : { ...base, tipoIngreso: r.tipoIngreso || "Laboral" };
+  }
+
+  // Sincroniza en ambos sentidos: primero envía los cambios locales y luego trae la hoja.
+  // Los registros que aún no se pudieron enviar se conservan tal como están en la app.
+  async fetchFromGoogleSheets({ silent = false } = {}) {
+    if (!this.data.googleScriptUrl) {
+      if (!silent) showToast("Configura primero la URL de tu Google Apps Script", 'error');
+      return false;
+    }
+    if (this._pulling) return this._pulling;
+
+    this._pulling = (async () => {
+      try {
+        if (!silent) showToast("Sincronizando con Google Sheets...", 'info');
+        if (!this.data.sheetsProtocol) {
+          const det = await this.detectProtocol();
+          if (!det.protocol) throw new Error(det.error);
+        }
+
+        await this.resendPending();
+
+        let remote;
+        if (this.isFullSync()) {
+          remote = await this.callSheets({ action: 'list' });
+          if (!remote.ok) throw new Error(remote.error || 'Respuesta inválida del script');
+        } else {
+          const res = await fetch(this.data.googleScriptUrl);
+          remote = await res.json();
+          // Filas de encabezado del script antiguo
+          if (Array.isArray(remote.gastos)) remote.gastos = remote.gastos.slice(1).filter(r => r[0] && r[1]);
+          if (Array.isArray(remote.ingresos)) remote.ingresos = remote.ingresos.slice(1).filter(r => r[0] && r[1]);
+        }
+
+        const deleted = new Set(this.data.pendingDeletes.map(d => `${d.type}:${d.id}`));
+        ['gasto', 'ingreso'].forEach(type => {
+          const key = type === 'gasto' ? 'gastos' : 'ingresos';
+          if (!Array.isArray(remote[key])) return;
+          const local = this.data[key];
+          const pending = local.filter(m => m.synced === false);
+          const pendingIds = new Set(pending.map(m => m.id));
+          const createdAt = new Map(local.map(m => [m.id, m.createdAt]));
+          const fromSheet = remote[key]
+            .map((r, i) => this.remoteToLocal(type, r, i))
+            .filter(m => !pendingIds.has(m.id) && !deleted.has(`${type}:${m.id}`))
+            .map(m => (createdAt.get(m.id) ? { ...m, createdAt: createdAt.get(m.id) } : m));
+          this.data[key] = [...pending, ...fromSheet];
+        });
+
+        this.data.lastPull = Date.now();
+        this.save();
+        renderAll();
+
+        const left = this.pendingCount();
+        if (!silent) {
+          showToast(left > 0
+            ? `Sincronizado; quedan ${left} cambio(s) sin enviar`
+            : "¡Sincronizado con Google Sheets!", left > 0 ? 'info' : 'success');
+        }
+        return true;
+      } catch (err) {
+        console.error("Error al sincronizar con Google Sheets:", err);
+        if (!silent) showToast(err.message || "Error al leer desde Google Sheets", 'error');
+        return false;
+      } finally {
+        this._pulling = null;
+      }
+    })();
+    return this._pulling;
   }
 
   exportJSON() {
@@ -559,9 +683,10 @@ class AppState {
     if (!data || !Array.isArray(data.gastos) || !Array.isArray(data.ingresos)) {
       throw new Error('El archivo no es un respaldo válido de GastosApp');
     }
-    const keepUrl = this.data.googleScriptUrl;
+    // La conexión con Sheets es de cada dispositivo: si este ya tiene una, se conserva
+    const { googleScriptUrl, sheetsToken, sheetsProtocol } = this.data;
     this.data = { ...JSON.parse(JSON.stringify(DEFAULT_STATE)), ...data };
-    if (!this.data.googleScriptUrl) this.data.googleScriptUrl = keepUrl;
+    if (googleScriptUrl) Object.assign(this.data, { googleScriptUrl, sheetsToken, sheetsProtocol });
     this.migrate();
     this.save();
   }
@@ -603,20 +728,32 @@ document.addEventListener('DOMContentLoaded', () => {
   initCategorySearch();
   initCurrencyConverter();
   switchView(state.data.activeTab || 'inicio', { scroll: false });
-  retryPendingInBackground();
+  backgroundSync();
   registerServiceWorker();
 });
 
-window.addEventListener('online', retryPendingInBackground);
+window.addEventListener('online', () => backgroundSync({ force: true }));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') backgroundSync();
+});
 
-async function retryPendingInBackground() {
-  if (!state.data.googleScriptUrl || state.getPending().length === 0 || !navigator.onLine) return;
-  const before = state.getPending().length;
-  const left = await state.resendPending();
-  if (left < before) {
+// Sincronización silenciosa: al abrir la app, al volver a ella y al recuperar la conexión.
+// Con el script v2 trae también los cambios hechos en la hoja o en otro dispositivo.
+async function backgroundSync({ force = false } = {}) {
+  if (!state.data.googleScriptUrl || !navigator.onLine) return;
+  const before = state.pendingCount();
+
+  if (state.isFullSync() || !state.data.sheetsProtocol) {
+    const stale = Date.now() - (state.data.lastPull || 0) > 2 * 60 * 1000;
+    if (!force && !stale && before === 0) return;
+    await state.fetchFromGoogleSheets({ silent: true });
+  } else if (before > 0) {
+    await state.resendPending();
     renderAll();
-    showToast(`Se enviaron ${before - left} registro(s) pendientes a Google Sheets`);
   }
+
+  const sent = before - state.pendingCount();
+  if (sent > 0) showToast(`Se enviaron ${sent} cambio(s) pendientes a Google Sheets`);
 }
 
 function registerServiceWorker() {
@@ -962,11 +1099,19 @@ function renderMovementsList() {
 function deleteItem(type, id) {
   const item = state.find(type, id);
   if (!item) return;
-  const extra = item.synced === true ? '\n\nSolo se elimina en la app: en Google Sheets debes borrarlo a mano.' : '';
-  if (confirm(`¿Deseas eliminar este registro de ${state.formatMoney(item.valor)}?${extra}`)) {
-    state.deleteMovement(type, id);
-    renderAll();
-    showToast('Registro eliminado');
+  let extra = '';
+  if (state.isFullSync() && item.remote) extra = '\n\nTambién se borrará de Google Sheets.';
+  else if (item.synced === true && state.data.googleScriptUrl) extra = '\n\nSolo se elimina en la app: en Google Sheets debes borrarlo a mano (actualiza el Apps Script para que se borre solo).';
+  if (!confirm(`¿Deseas eliminar este registro de ${state.formatMoney(item.valor)}?${extra}`)) return;
+
+  state.deleteMovement(type, id);
+  renderAll();
+  showToast('Registro eliminado');
+  if (state.isFullSync() && state.data.pendingDeletes.length > 0) {
+    state.resendPending().then(left => {
+      renderAll();
+      if (left > 0) showToast('Eliminado en la app; se borrará de Sheets al recuperar la conexión', 'info');
+    });
   }
 }
 
@@ -1460,9 +1605,12 @@ function computeAlerts() {
     }
   });
 
-  const pending = state.getPending().length;
+  const pending = state.pendingCount();
   if (pending > 0 && state.data.googleScriptUrl) {
-    alerts.push({ level: 'info', icon: 'cloud_off', title: 'Registros sin sincronizar', text: `${pending} registro(s) aún no llegan a Google Sheets. Se reintentará al recuperar la conexión.` });
+    alerts.push({ level: 'info', icon: 'cloud_off', title: 'Cambios sin sincronizar', text: `${pending} cambio(s) aún no llegan a Google Sheets. Se reintentará al recuperar la conexión.` });
+  }
+  if (state.data.googleScriptUrl && state.data.sheetsProtocol === 1) {
+    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script', text: 'Con el script antiguo, editar o borrar no llega a Google Sheets. Reemplázalo por apps-script/Code.gs para sincronizar en ambos sentidos.' });
   }
 
   const ingresos = state.getIngresosMes(key);
@@ -1627,7 +1775,8 @@ function renderFormSyncHints() {
   const label = form.type === 'gasto' ? 'Gasto' : 'Ingreso';
   setText('saveExpenseText', form.editing ? 'Guardar cambios' : (hasSheets ? `Guardar ${label} en Google Sheets` : `Guardar ${label}`));
   setText('saveHintText', form.editing
-    ? (form.editing.synced ? 'Los cambios se guardan en la app; en Google Sheets corrígelo a mano.' : 'Los cambios se guardan en este dispositivo.')
+    ? (state.isFullSync() ? 'Los cambios también se aplicarán en tu Google Sheet.'
+      : form.editing.synced && hasSheets ? 'Los cambios se guardan en la app; en Google Sheets corrígelo a mano.' : 'Los cambios se guardan en este dispositivo.')
     : (hasSheets ? 'Se registrará en la pestaña correspondiente de tu Google Sheet' : 'Se guarda en este dispositivo. Conecta Google Sheets en Ajustes para sincronizar.'));
   setText('syncTargetText', hasSheets ? 'BDGastosApp' : 'este dispositivo');
 }
@@ -1677,8 +1826,15 @@ async function saveForm() {
   if (form.editing) {
     const { type, id, synced } = form.editing;
     const item = state.updateMovement(type, id, fields);
-    if (item && item.synced === false && state.data.googleScriptUrl) state.syncItem(type, item).then(renderAll);
-    showToast(synced ? 'Registro actualizado en la app (corrígelo también en Google Sheets)' : 'Registro actualizado');
+    if (item && item.synced === false && state.data.googleScriptUrl) {
+      state.syncItem(type, item).then(ok => {
+        renderAll();
+        if (!ok) showToast('Actualizado en la app; se enviará a Sheets al recuperar la conexión', 'info');
+      });
+    }
+    showToast(synced && state.data.googleScriptUrl && !state.isFullSync()
+      ? 'Registro actualizado en la app (corrígelo también en Google Sheets)'
+      : 'Registro actualizado');
   } else {
     const type = form.type;
     state.addMovement(type, fields).then(item => {
@@ -1705,6 +1861,8 @@ function openModal(id) {
   if (id === 'sheetsConfigModal') {
     const input = document.getElementById('googleScriptUrlInput');
     if (input) input.value = state.data.googleScriptUrl || '';
+    const tokenInput = document.getElementById('sheetsTokenInput');
+    if (tokenInput) tokenInput.value = state.data.sheetsToken || '';
     renderSettingsStatus();
   }
   modal.classList.add('open');
@@ -1732,29 +1890,57 @@ window.openSheetsConfigModal = () => openModal('sheetsConfigModal');
 window.closeSheetsConfigModal = () => closeModal('sheetsConfigModal');
 
 function renderSettingsStatus() {
-  const pending = state.getPending().length;
+  const pending = state.pendingCount();
   const hasSheets = !!state.data.googleScriptUrl;
+  const mode = { 2: 'Sincronización completa (crear, editar y borrar).', 1: 'Script antiguo: solo se envían registros nuevos. Actualiza el Apps Script para editar y borrar.', 0: 'Conexión sin verificar.' }[state.data.sheetsProtocol];
+  const last = state.data.lastPull ? ` Última sincronización: ${new Date(state.data.lastPull).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}` : '';
   setText('syncStatusText', !hasSheets
     ? 'Sin conectar: los datos solo están en este dispositivo.'
-    : pending > 0 ? `${pending} registro(s) pendientes de enviar.` : 'Todo sincronizado.');
+    : `${mode} ${pending > 0 ? `${pending} cambio(s) pendientes de enviar.` : 'Todo enviado.'}${state.isFullSync() ? last : ''}`);
   document.getElementById('resendPendingBtn')?.classList.toggle('hidden', !hasSheets || pending === 0);
+  setText('reloadFromSheetsText', state.isFullSync() ? 'Sincronizar ahora' : 'Cargar desde Google Sheets');
   setText('dataStatsText', `${state.data.gastos.length} gastos y ${state.data.ingresos.length} ingresos guardados.`);
 }
 
 function initSettings() {
-  document.getElementById('saveSheetsUrlBtn')?.addEventListener('click', () => {
-    const input = document.getElementById('googleScriptUrlInput');
-    const url = (input?.value || '').trim();
-    if (url && !/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) {
-      showToast('La URL debe ser de script.google.com', 'error');
+  document.getElementById('saveSheetsUrlBtn')?.addEventListener('click', async () => {
+    const url = (document.getElementById('googleScriptUrlInput')?.value || '').trim();
+    const token = (document.getElementById('sheetsTokenInput')?.value || '').trim();
+    if (url && /\/macros\/library\//.test(url)) {
+      showToast('Esa es la URL de una Biblioteca. Implementa el script como "Aplicación web" y usa la URL que termina en /exec', 'error');
       return;
     }
+    if (url && !/^https:\/\/script\.google\.com\/macros\/(s|u\/\d+\/s)\/[\w-]+\/(exec|dev)(\?.*)?$/.test(url)) {
+      showToast('La URL debe ser de una aplicación web de Apps Script: https://script.google.com/macros/s/.../exec', 'error');
+      return;
+    }
+    const changed = url !== state.data.googleScriptUrl || token !== state.data.sheetsToken;
     state.data.googleScriptUrl = url;
+    state.data.sheetsToken = token;
+    if (changed) state.data.sheetsProtocol = 0;
     state.save();
-    closeModal('sheetsConfigModal');
+
+    if (!url) {
+      closeModal('sheetsConfigModal');
+      renderAll();
+      showToast('Sincronización desconectada');
+      return;
+    }
+
+    showToast('Verificando conexión con Google Sheets...', 'info');
+    const { protocol, error } = await state.detectProtocol();
     renderAll();
-    showToast(url ? 'URL de sincronización guardada' : 'Sincronización desconectada');
-    retryPendingInBackground();
+    if (protocol === 2) {
+      closeModal('sheetsConfigModal');
+      showToast('Conectado: sincronización completa activada');
+      state.fetchFromGoogleSheets({ silent: true }).then(renderAll);
+    } else if (protocol === 1) {
+      closeModal('sheetsConfigModal');
+      showToast('Conectado con el script antiguo: actualízalo para editar y borrar en Sheets', 'info');
+      backgroundSync({ force: true });
+    } else {
+      showToast(`URL guardada, pero ${error ? error.charAt(0).toLowerCase() + error.slice(1) : 'no se pudo verificar'}`, 'error');
+    }
   });
 
   document.getElementById('reloadFromSheetsBtn')?.addEventListener('click', () => state.fetchFromGoogleSheets());
@@ -1797,7 +1983,10 @@ function initSettings() {
 }
 
 window.confirmResetAll = function() {
-  if (confirm('¿Deseas vaciar todos los gastos e ingresos registrados para empezar desde cero? Tu balance quedará en $0.\n\nTip: exporta un respaldo antes.')) {
+  const note = state.data.googleScriptUrl
+    ? '\n\nSolo se vacía este dispositivo: tu Google Sheet no se modifica y los datos volverán al sincronizar.'
+    : '\n\nTip: exporta un respaldo antes.';
+  if (confirm(`¿Deseas vaciar todos los gastos e ingresos registrados en la app? Tu balance quedará en $0.${note}`)) {
     state.clearAllMovements();
     renderAll();
     closeModal('sheetsConfigModal');

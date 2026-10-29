@@ -797,14 +797,16 @@
           </p>
           <label class="sr-only" for="googleScriptUrlInput">URL Webhook de Google Apps Script</label>
           <input id="googleScriptUrlInput" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm border border-slate-200 outline-none focus:ring-2 focus:ring-secondary" placeholder="https://script.google.com/macros/s/.../exec" type="url"/>
+          <label class="sr-only" for="sheetsTokenInput">Clave del script (opcional)</label>
+          <input id="sheetsTokenInput" autocomplete="off" class="w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm border border-slate-200 outline-none focus:ring-2 focus:ring-secondary" placeholder="Clave del script (opcional, CONFIG.TOKEN)" type="password"/>
           <p id="syncStatusText" class="text-[12px] text-on-surface-variant"></p>
           <button id="saveSheetsUrlBtn" class="w-full h-11 bg-primary hover:bg-tertiary text-on-primary rounded-xl font-label-lg font-semibold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">save</span>
-            Guardar URL
+            Guardar y verificar
           </button>
           <button id="reloadFromSheetsBtn" class="w-full h-10 bg-secondary-container text-on-secondary-container hover:bg-secondary-fixed rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">sync</span>
-            Cargar desde Google Sheets
+            <span id="reloadFromSheetsText">Cargar desde Google Sheets</span>
           </button>
           <button id="resendPendingBtn" class="hidden w-full h-10 bg-surface-container text-on-surface hover:bg-surface-container-high rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">cloud_upload</span>

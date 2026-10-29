@@ -38,18 +38,29 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
 
 ## 🔄 Sincronización con Google Sheets
 
-1. Publica tu Google Apps Script como aplicación web y copia la URL (`https://script.google.com/macros/s/.../exec`).
-2. En la app abre **Ajustes** (⚙️) y pega la URL.
+La sincronización es **en ambos sentidos**: lo que crees, edites o borres en la app llega a la hoja, y lo que cambies en la hoja (o desde otro dispositivo) aparece en la app.
 
-Cómo funciona:
+### Instalar el script
 
-- Cada registro nuevo se envía por `POST` al script. Si no hay conexión queda **pendiente** (icono ☁️ tachado) y se reintenta solo al recuperar la red, o manualmente con *Reenviar pendientes*.
-- Al conectar Sheets por primera vez también se envían los registros creados en la app que nunca se habían enviado.
-- *Cargar desde Google Sheets* reemplaza los datos locales por los de la hoja, **conservando y reenviando** los pendientes.
-- Editar o borrar un registro que ya está en Sheets solo lo cambia en la app; en la hoja hay que corregirlo a mano.
-- Como el envío usa `mode: "no-cors"`, la app detecta fallos de red pero no errores internos del script.
+1. Abre tu hoja **BDGastosApp** → *Extensiones* → *Apps Script*.
+2. **Guarda una copia de tu script actual** (por si acaso) y reemplaza el contenido de `Code.gs` por [`apps-script/Code.gs`](apps-script/Code.gs).
+3. Si tus pestañas no se llaman `Registro de Gastos` y `Registro de Ingresos`, ajusta `CONFIG.SHEETS` al inicio del archivo.
+4. Publica: *Implementar* → *Administrar implementaciones* → ✏️ editar la implementación actual → *Versión: nueva versión* → *Implementar*. Así la URL no cambia. (Si es la primera vez: *Nueva implementación* → *Aplicación web*, ejecutar como **tú**, acceso **cualquier usuario**.)
+5. En la app abre **Ajustes** (⚙️), pega la URL y pulsa *Guardar y verificar*. Debe decir “Sincronización completa”.
 
-El script debe responder al `GET` con `{ "gastos": [[fecha, valor, macro, sub, concepto, nota], ...], "ingresos": [[fecha, valor, tipo, concepto, nota], ...] }` (la primera fila de cada lista son los encabezados).
+Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del script* de la app para que nadie más pueda escribir en tu hoja aunque conozca la URL.
+
+### Cómo funciona
+
+- El script agrega una columna **ID** al final de cada pestaña (sin mover las demás) y asigna un id a las filas antiguas, así todo se puede editar y borrar.
+- La app envía `POST` con JSON en `text/plain` (sin preflight CORS), lee la respuesta y solo marca un cambio como enviado cuando el script confirma `ok`.
+- Sin conexión, los cambios quedan **pendientes** (☁️ tachado) y se envían solos al volver la red o al abrir la app; también con *Reenviar pendientes*.
+- La app se sincroniza sola al abrirse y al volver a ella (como máximo cada 2 minutos), o con *Sincronizar ahora*.
+- Primero se envían los cambios locales y luego se descarga la hoja, de modo que nada pendiente se pisa.
+- *Vaciar registros* solo borra los datos del dispositivo; la hoja no se toca.
+- Con el **script antiguo** la app sigue funcionando en modo compatible (solo envía registros nuevos) y muestra un aviso para actualizarlo.
+
+Acciones del script (`POST`): `ping`, `list`, `upsert` (crea o actualiza por `id`), `delete`. El `GET` sin clave devuelve el listado.
 
 ---
 
@@ -79,6 +90,8 @@ Luego abre [http://localhost:3000](http://localhost:3000). El servidor solo entr
 │   ├── logo.svg                 # Logo vectorial
 │   ├── icon-192.png             # Iconos PWA
 │   └── icon-512.png
+├── apps-script/
+│   └── Code.gs                  # Script para Google Sheets (sincronización en ambos sentidos)
 ├── stitch_export/               # Pantallas originales de Stitch (referencia de diseño)
 ├── index.html                   # SPA: vistas, modales y configuración de Tailwind
 ├── app.js                       # Estado, cálculos, render, sincronización y conversor
