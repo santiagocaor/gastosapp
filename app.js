@@ -852,6 +852,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCategorySearch();
   initMovementsFilters();
   initCurrencyConverter();
+  initTaxCalculator();
   switchView(state.data.activeTab || 'inicio', { scroll: false });
   processRecurring();
   backgroundSync();
@@ -958,6 +959,8 @@ function initActions() {
         ui.mov.period = d.period;
         renderMovementsView();
         break;
+      case 'copy-tax': copyTax(d.part); break;
+      case 'use-tax-total': useTaxTotal(); break;
       case 'toggle-converter':
         ui.converterOpen = !ui.converterOpen;
         renderConverterToggle();
@@ -2795,6 +2798,97 @@ window.setConverterValue = function(val) {
     calculateConversion();
   }
 };
+
+// ========================================================
+// CALCULADORA DE IMPUESTOS DE VENTA (QUEBEC)
+// Federal: GST/TPS 5 %. Provincial: QST/TVQ 9,975 %. Si cambian, se actualizan aquí.
+// ========================================================
+const GST_RATE = 5;
+const QST_RATE = 9.975;
+
+function formatRate(r) {
+  return `${r.toLocaleString('es-CO', { maximumFractionDigits: 3 })} %`;
+}
+
+function computeTaxes(amount) {
+  const base = Math.round((Number(amount) || 0) * 100) / 100;
+  // +1e-7 evita que 4,4999999 (coma flotante) se redondee hacia abajo
+  const federal = Math.round(base * GST_RATE + 1e-7) / 100;
+  const provincial = Math.round(base * QST_RATE + 1e-7) / 100;
+  return { base, federal, provincial, total: Math.round((base + federal + provincial) * 100) / 100 };
+}
+
+function taxAmountValue() {
+  return document.getElementById('taxAmount')?.value;
+}
+
+function initTaxCalculator() {
+  document.getElementById('taxAmount')?.addEventListener('input', renderTaxCalculator);
+  renderTaxCalculator();
+}
+
+function renderTaxCalculator() {
+  const t = computeTaxes(taxAmountValue());
+  setText('taxFederalValue', formatCurrency(t.federal, 'CAD'));
+  setText('taxProvincialValue', formatCurrency(t.provincial, 'CAD'));
+  setText('taxTotalValue', formatCurrency(t.total, 'CAD'));
+  document.querySelectorAll('[data-tax-needs-amount]').forEach(b => {
+    b.disabled = t.base <= 0;
+    b.classList.toggle('opacity-40', t.base <= 0);
+  });
+}
+
+function copyText(text, label) {
+  const done = () => showToast(`Copiado: ${label || text}`);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+
+// Respaldo para navegadores sin portapapeles asíncrono
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { showToast('No se pudo copiar', 'error'); }
+  ta.remove();
+}
+
+// part: 'total' | 'federal' | 'provincial' | 'detalle'
+function copyTax(part) {
+  const t = computeTaxes(taxAmountValue());
+  if (t.base <= 0) return;
+  if (part === 'detalle') {
+    copyText([
+      `Subtotal: ${formatCurrency(t.base, 'CAD')}`,
+      `TPS/GST (${formatRate(GST_RATE)}): ${formatCurrency(t.federal, 'CAD')}`,
+      `TVQ/QST (${formatRate(QST_RATE)}): ${formatCurrency(t.provincial, 'CAD')}`,
+      `Total: ${formatCurrency(t.total, 'CAD')}`
+    ].join('\n'), 'detalle de impuestos');
+    return;
+  }
+  copyText(t[part].toFixed(2), formatCurrency(t[part], 'CAD'));
+}
+
+// Abre Registrar con el total (en CAD) como monto del gasto
+function useTaxTotal() {
+  const t = computeTaxes(taxAmountValue());
+  if (t.base <= 0) return;
+  resetForm();
+  form.type = 'gasto';
+  switchView('registrar');
+  setFormCurrency('CAD');
+  const amt = document.getElementById('expenseAmountInput');
+  if (amt) amt.value = t.total.toFixed(2);
+  renderFormSelectors();
+  showToast(`Total con impuestos: ${formatCurrency(t.total, 'CAD')}`, 'info');
+}
 
 window.copyConversionResult = function() {
   const outputEl = document.getElementById('converterOutputValue');

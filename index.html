@@ -358,6 +358,55 @@
           </div>
         </div>
 
+        <!-- Calculadora de impuestos (CAD) -->
+        <div class="bg-surface-container-lowest rounded-2xl px-4 py-3 shadow-xs border border-slate-200/90 space-y-2.5">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-8 h-8 rounded-lg bg-secondary/10 text-secondary flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-[20px]">calculate</span>
+              </div>
+              <div class="min-w-0">
+                <h3 class="text-label-lg font-bold text-on-surface leading-tight">Impuestos Quebec</h3>
+                <p class="text-[11px] text-on-surface-variant truncate">TPS 5 % + TVQ 9,975 % = 14,975 %</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="relative flex items-center">
+            <span class="absolute left-3 text-secondary font-bold text-[13px]">CA$</span>
+            <label class="sr-only" for="taxAmount">Precio antes de impuestos (CAD)</label>
+            <input id="taxAmount" type="number" inputmode="decimal" step="any" min="0" placeholder="Precio antes de impuestos" class="w-full h-10 pl-12 pr-3 rounded-xl bg-surface-container-low text-on-surface font-semibold text-[16px] border border-slate-200 outline-none focus:ring-2 focus:ring-secondary"/>
+          </div>
+
+          <div class="text-[13px] space-y-1">
+            <button type="button" data-action="copy-tax" data-part="federal" data-tax-needs-amount class="w-full flex items-center justify-between gap-2 px-1 text-on-surface-variant hover:text-on-surface" title="Copiar">
+              <span class="truncate">Federal · TPS/GST 5 %</span>
+              <span id="taxFederalValue" class="font-semibold text-on-surface whitespace-nowrap">CA$0.00</span>
+            </button>
+            <button type="button" data-action="copy-tax" data-part="provincial" data-tax-needs-amount class="w-full flex items-center justify-between gap-2 px-1 text-on-surface-variant hover:text-on-surface" title="Copiar">
+              <span class="truncate">Provincial · TVQ/QST 9,975 %</span>
+              <span id="taxProvincialValue" class="font-semibold text-on-surface whitespace-nowrap">CA$0.00</span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-secondary/10 border border-secondary/20">
+            <span class="text-label-md font-bold text-on-surface">Total</span>
+            <span id="taxTotalValue" class="text-[18px] font-extrabold text-primary tracking-tight whitespace-nowrap">CA$0.00</span>
+          </div>
+
+          <div class="grid grid-cols-3 gap-1.5">
+            <button type="button" data-action="copy-tax" data-part="total" data-tax-needs-amount class="h-9 rounded-lg bg-primary text-on-primary text-[12px] font-bold flex items-center justify-center gap-1 transition-opacity">
+              <span class="material-symbols-outlined text-[16px]">content_copy</span> Total
+            </button>
+            <button type="button" data-action="copy-tax" data-part="detalle" data-tax-needs-amount class="h-9 rounded-lg bg-surface-container text-on-surface text-[12px] font-semibold flex items-center justify-center gap-1 transition-opacity">
+              <span class="material-symbols-outlined text-[16px]">content_copy</span> Detalle
+            </button>
+            <button type="button" data-action="use-tax-total" data-tax-needs-amount class="h-9 rounded-lg bg-surface-container text-on-surface text-[12px] font-semibold flex items-center justify-center gap-1 transition-opacity">
+              <span class="material-symbols-outlined text-[16px]">add_shopping_cart</span> Gasto
+            </button>
+          </div>
+        </div>
+
         <!-- Category Breakdown Chips Carousel -->
         <div class="space-y-space-sm">
           <div class="flex items-center justify-between">
