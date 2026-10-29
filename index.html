@@ -9,12 +9,19 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="GastosApp"/>
   <meta name="format-detection" content="telephone=no"/>
+  <meta name="description" content="Control de gastos, ingresos y presupuestos personales sincronizado con Google Sheets"/>
   <title>GastosApp - Control de Gastos y Presupuestos</title>
 
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.webmanifest"/>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg"/>
+  <link rel="apple-touch-icon" href="assets/icon-192.png"/>
+
   <!-- Google Fonts: Manrope, JetBrains Mono, Material Symbols Outlined -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" rel="stylesheet"/>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -132,13 +139,13 @@
   <div class="w-full max-w-md min-h-screen bg-surface shadow-2xl relative flex flex-col border-x border-slate-200/80">
 
     <!-- Top Sticky Header -->
-    <header class="fixed top-0 inset-x-0 mx-auto max-w-md w-full z-50 bg-surface/85 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+    <header class="fixed top-0 inset-x-0 mx-auto max-w-md w-full z-40 bg-surface/85 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
       <div class="h-16 px-gutter flex items-center justify-between gap-space-sm">
         <div class="flex items-center gap-space-xs min-w-0">
-          <button id="headerBackBtn" aria-label="Volver" class="w-10 h-10 -ml-1.5 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container-low transition-colors hidden" onclick="switchView('inicio')" type="button">
+          <button id="headerBackBtn" aria-label="Volver" class="w-10 h-10 -ml-1.5 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container-low transition-colors hidden" data-action="goto" data-view="inicio" type="button">
             <span class="material-symbols-outlined text-[24px]">arrow_back</span>
           </button>
-          <img alt="GastosApp Logo" class="h-8 w-8 object-contain shrink-0" src="assets/logo.svg"/>
+          <img alt="" class="h-8 w-8 object-contain shrink-0" src="assets/logo.svg"/>
           <div class="flex flex-col truncate">
             <span class="text-body-sm font-semibold text-secondary leading-none">GastosApp</span>
             <h1 id="headerTitle" class="text-headline-sm font-headline-sm text-on-surface truncate">Inicio</h1>
@@ -146,20 +153,15 @@
         </div>
 
         <div class="flex items-center gap-space-xs shrink-0">
-          <!-- Google Sheets Sync Config Button -->
-          <button id="openSheetsConfigBtn" onclick="openSheetsConfigModal()" aria-label="Sincronizar Google Sheets" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-secondary hover:bg-surface-container-low transition-colors" type="button" title="Configurar Google Sheets">
-            <span class="material-symbols-outlined text-[22px]">table_chart</span>
-          </button>
-
-          <!-- Notification Bell -->
-          <button aria-label="Notificaciones" data-open-notifications class="relative w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" type="button">
+          <!-- Notificaciones -->
+          <button aria-label="Notificaciones" data-action="open-modal" data-modal="notificationsModal" class="relative w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" type="button">
             <span class="material-symbols-outlined text-[22px]">notifications</span>
-            <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full animate-pulse-subtle"></span>
+            <span id="notifDot" class="hidden absolute top-2 right-2 w-2 h-2 bg-error rounded-full animate-pulse-subtle"></span>
           </button>
 
-          <!-- User Profile -->
-          <button aria-label="Perfil de usuario" class="w-10 h-10 flex items-center justify-center rounded-full hover:scale-105 transition-transform" type="button" onclick="alert('Mateo González • Plan Premium GastosApp')">
-            <img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-2 ring-secondary/30" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80"/>
+          <!-- Ajustes y datos -->
+          <button id="openSheetsConfigBtn" data-action="open-modal" data-modal="sheetsConfigModal" aria-label="Ajustes y datos" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-secondary hover:bg-surface-container-low transition-colors" type="button" title="Ajustes, Google Sheets y respaldos">
+            <span class="material-symbols-outlined text-[22px]">settings</span>
           </button>
         </div>
       </div>
@@ -172,19 +174,19 @@
       <!-- VIEW 1: INICIO (DASHBOARD)                     -->
       <!-- ============================================== -->
       <section id="view-inicio" class="view-panel active px-gutter space-y-space-lg">
-        
-        <!-- Dynamic Greeting & Month Switcher -->
-        <div class="flex items-center justify-between pt-space-xs">
+
+        <!-- Saludo y selector de mes -->
+        <div class="flex items-center justify-between gap-2 pt-space-xs">
           <div class="flex flex-col min-w-0">
-            <span class="text-body-sm text-secondary font-semibold">¡Hola de nuevo, Mateo! 👋</span>
-            <p class="text-headline-sm text-on-surface truncate">Tu resumen financiero</p>
+            <span id="greetingText" class="text-body-sm text-secondary font-semibold">¡Hola! 👋</span>
+            <p class="text-headline-sm text-on-surface leading-tight">Tu resumen</p>
           </div>
-          <div class="flex items-center bg-surface-container-low px-space-xs py-1 rounded-full shadow-xs">
-            <button aria-label="Mes anterior" class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:text-on-surface rounded-full transition-colors active:scale-90" type="button">
+          <div class="flex items-center bg-surface-container-low px-space-xs py-1 rounded-full shadow-xs shrink-0">
+            <button aria-label="Mes anterior" data-action="month-prev" class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:text-on-surface rounded-full transition-colors active:scale-90" type="button">
               <span class="material-symbols-outlined text-[18px]">chevron_left</span>
             </button>
-            <span class="text-label-md text-on-surface px-1 select-none font-medium">Noviembre 2024</span>
-            <button aria-label="Mes siguiente" class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:text-on-surface rounded-full transition-colors active:scale-90" type="button">
+            <span id="dashMonthLabel" class="text-label-md text-on-surface px-1 select-none font-medium whitespace-nowrap">Mes actual</span>
+            <button id="monthNextBtn" aria-label="Mes siguiente" data-action="month-next" class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:text-on-surface rounded-full transition-colors active:scale-90" type="button">
               <span class="material-symbols-outlined text-[18px]">chevron_right</span>
             </button>
           </div>
@@ -192,27 +194,22 @@
 
         <!-- Hero Financial Balance Card -->
         <div class="relative overflow-hidden rounded-xl bg-primary-container text-on-primary p-space-md shadow-xl">
-          <!-- Ambient Glow -->
           <div class="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-secondary-container/20 blur-2xl pointer-events-none"></div>
           <div class="absolute -left-12 -bottom-12 w-40 h-40 rounded-full bg-primary/40 blur-xl pointer-events-none"></div>
 
           <div class="relative z-10 flex flex-col space-y-space-md">
             <!-- Balance Row -->
-            <div class="flex items-start justify-between">
-              <div class="flex flex-col">
-                <div class="flex items-center gap-1.5 text-on-primary-container">
-                  <span class="text-body-sm">Balance Total Disponible</span>
-                  <button aria-label="Alternar visibilidad" id="balanceToggleBtn" class="opacity-80 hover:opacity-100 transition-opacity" type="button">
+            <div class="flex flex-col">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5 text-on-primary-container min-w-0">
+                  <span class="text-body-sm truncate">Balance total disponible</span>
+                  <button aria-label="Mostrar u ocultar balance" id="balanceToggleBtn" class="opacity-80 hover:opacity-100 transition-opacity" type="button">
                     <span id="eyeIcon" class="material-symbols-outlined text-[16px]">visibility</span>
                   </button>
                 </div>
-                <div class="flex items-baseline gap-1 mt-0.5">
-                  <span id="balanceAmount" class="text-display-lg-mobile font-display-lg-mobile font-bold tracking-tight">$2,450.00</span>
-                </div>
+                <span id="balanceBadge" class="hidden inline-flex items-center px-2 py-0.5 rounded-full text-label-md bg-secondary text-on-secondary shadow-sm font-semibold shrink-0"></span>
               </div>
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-md bg-secondary text-on-secondary shadow-sm font-semibold">
-                +8.4% este mes
-              </span>
+              <span id="balanceAmount" class="mt-0.5 text-display-lg-mobile font-display-lg-mobile font-bold tracking-tight break-all">$0</span>
             </div>
 
             <!-- Income & Expense Split -->
@@ -223,7 +220,7 @@
                 </div>
                 <div class="flex flex-col min-w-0">
                   <span class="text-body-sm text-on-primary-container truncate">Ingresos</span>
-                  <span id="dashIncome" class="text-label-lg text-secondary-fixed font-semibold tracking-tight truncate">+$3,800.00</span>
+                  <span id="dashIncome" class="text-label-lg text-secondary-fixed font-semibold tracking-tight truncate">+$0</span>
                 </div>
               </div>
 
@@ -233,25 +230,25 @@
                 </div>
                 <div class="flex flex-col min-w-0">
                   <span class="text-body-sm text-on-primary-container truncate">Gastos</span>
-                  <span id="dashExpense" class="text-label-lg text-error-container font-semibold tracking-tight truncate">-$1,350.00</span>
+                  <span id="dashExpense" class="text-label-lg text-error-container font-semibold tracking-tight truncate">-$0</span>
                 </div>
               </div>
             </div>
 
             <!-- Budget Consumption Progress Bar -->
-            <div class="space-y-1.5 pt-space-xs">
-              <div class="flex items-center justify-between text-body-sm text-on-primary-container">
-                <span class="flex items-center gap-1">
+            <button type="button" data-action="goto" data-view="presupuestos" class="space-y-1.5 pt-space-xs text-left w-full">
+              <div class="flex items-center justify-between gap-2 text-body-sm text-on-primary-container">
+                <span class="flex items-center gap-1 min-w-0">
                   <span class="material-symbols-outlined text-[14px]">savings</span>
-                  <span id="budgetProgressText">Presupuesto Global (62% gastado)</span>
+                  <span id="budgetProgressText" class="truncate">Presupuesto</span>
                 </span>
-                <span id="budgetRatioText" class="font-medium text-on-primary">$1,350 / $2,200</span>
+                <span id="budgetRatioText" class="font-medium text-on-primary whitespace-nowrap">$0 / $0</span>
               </div>
               <div class="w-full h-2 rounded-full bg-primary overflow-hidden">
-                <div id="budgetBar" class="h-full bg-secondary-fixed-dim rounded-full transition-all duration-700 ease-out" style="width: 62%;"></div>
+                <div id="budgetBar" class="h-full bg-secondary-fixed-dim rounded-full transition-all duration-700 ease-out" style="width: 0%;"></div>
               </div>
-              <p id="budgetRemainingText" class="text-body-sm text-on-primary-container/80 text-right">Quedan $850.00 para 16 días</p>
-            </div>
+              <p id="budgetRemainingText" class="text-body-sm text-on-primary-container/80 text-right"></p>
+            </button>
           </div>
         </div>
 
@@ -269,6 +266,7 @@
               <span class="material-symbols-outlined text-on-secondary-container text-[20px]">payments</span>
             </div>
             <span class="text-label-md font-semibold leading-tight">Añadir Ingreso</span>
+          </button>
         </div>
 
         <!-- Conversor de Divisas en Tiempo Real (COP ⇄ CAD) -->
@@ -288,7 +286,7 @@
             </div>
 
             <!-- Botón para refrescar tasa -->
-            <button id="refreshExchangeRateBtn" onclick="fetchLiveExchangeRate(true)" class="p-1.5 rounded-lg text-on-surface-variant hover:text-secondary hover:bg-surface-container-low transition-colors cursor-pointer" title="Actualizar cotización en vivo" type="button">
+            <button id="refreshExchangeRateBtn" onclick="fetchLiveExchangeRate(true)" aria-label="Actualizar cotización" class="p-1.5 rounded-lg text-on-surface-variant hover:text-secondary hover:bg-surface-container-low transition-colors cursor-pointer" title="Actualizar cotización en vivo" type="button">
               <span id="refreshIcon" class="material-symbols-outlined text-[20px]">sync</span>
             </button>
           </div>
@@ -302,7 +300,7 @@
             </button>
 
             <!-- Botón de intercambio -->
-            <button onclick="toggleConversionDirection()" class="w-8 h-8 mx-1 rounded-full flex items-center justify-center text-on-surface-variant hover:text-secondary hover:bg-surface-container transition-transform active:rotate-180 cursor-pointer" type="button" title="Invertir divisas (CAD ⇄ COP)">
+            <button onclick="toggleConversionDirection()" aria-label="Invertir divisas" class="w-8 h-8 mx-1 rounded-full flex items-center justify-center text-on-surface-variant hover:text-secondary hover:bg-surface-container transition-transform active:rotate-180 cursor-pointer" type="button" title="Invertir divisas (CAD ⇄ COP)">
               <span class="material-symbols-outlined text-[18px]">swap_horiz</span>
             </button>
 
@@ -321,18 +319,16 @@
 
           <!-- Campos de entrada y resultado -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <!-- Monto a convertir -->
             <div class="space-y-1">
               <label id="converterInputLabel" class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider block" for="converterInput">Monto en COP ($)</label>
               <div class="relative flex items-center">
                 <span id="converterCurrencyPrefix" class="absolute left-3 text-secondary font-bold text-[13px]">COP $</span>
-                <input id="converterInput" type="number" step="any" min="0" value="100000" oninput="calculateConversion()" class="w-full h-11 pl-16 pr-3 rounded-xl bg-surface-container-low text-on-surface font-semibold text-[16px] border border-slate-200 outline-none focus:ring-2 focus:ring-secondary" placeholder="0"/>
+                <input id="converterInput" type="number" inputmode="decimal" step="any" min="0" value="100000" oninput="calculateConversion()" class="w-full h-11 pl-16 pr-3 rounded-xl bg-surface-container-low text-on-surface font-semibold text-[16px] border border-slate-200 outline-none focus:ring-2 focus:ring-secondary" placeholder="0"/>
               </div>
             </div>
 
-            <!-- Resultado de la conversión -->
             <div class="space-y-1">
-              <label id="converterOutputLabel" class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider block">Equivalente en CAD</label>
+              <span id="converterOutputLabel" class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider block">Equivalente en CAD</span>
               <div class="w-full h-11 px-3 rounded-xl bg-secondary/10 border border-secondary/20 flex items-center justify-between">
                 <span id="converterOutputValue" class="text-[16px] font-extrabold text-primary tracking-tight">$0.00 CAD</span>
                 <button onclick="copyConversionResult()" class="text-secondary hover:text-primary text-[11px] font-semibold flex items-center gap-0.5 cursor-pointer ml-1" type="button" title="Copiar monto">
@@ -346,9 +342,7 @@
           <!-- Botones de montos rápidos -->
           <div class="space-y-1">
             <span class="text-[11px] text-on-surface-variant font-medium block">Valores frecuentes:</span>
-            <div id="converterPresetChips" class="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px]">
-              <!-- Chips generados dinámicamente -->
-            </div>
+            <div id="converterPresetChips" class="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px]"></div>
           </div>
         </div>
 
@@ -356,33 +350,23 @@
         <div class="space-y-space-sm">
           <div class="flex items-center justify-between">
             <h2 class="text-headline-sm text-on-surface">Distribución de Gastos</h2>
-            <span class="text-label-md text-secondary font-semibold">Noviembre</span>
+            <span id="dashChipsMonth" class="text-label-md text-secondary font-semibold"></span>
           </div>
-
-          <!-- Horizontal Scroll Chips -->
-          <div id="dashCategoryChips" class="flex gap-space-sm overflow-x-auto pb-1 -mx-gutter px-gutter" style="-webkit-overflow-scrolling: touch;">
-            <!-- Dynamically populated from state -->
-          </div>
+          <div id="dashCategoryChips" class="flex gap-space-sm overflow-x-auto pb-1 -mx-gutter px-gutter" style="-webkit-overflow-scrolling: touch;"></div>
         </div>
 
-        <!-- Recent Movements List -->
+        <!-- Movimientos del mes -->
         <div class="space-y-space-sm pb-space-sm">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <h2 class="text-headline-sm text-on-surface">Movimientos Recientes</h2>
-            <div class="flex items-center gap-2">
-              <button class="px-2.5 py-1 bg-error-container/80 text-error hover:bg-error-container rounded-lg text-label-md flex items-center gap-1 font-semibold cursor-pointer transition-colors" type="button" onclick="confirmResetAll()" title="Vaciar todos los registros para empezar desde cero">
-                <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
-                Vaciar registros (Empezar desde cero)
-              </button>
-              <button class="text-label-md text-secondary font-semibold hover:underline px-1" onclick="switchView('estadisticas')">
-                Estadísticas
-              </button>
+          <div class="flex items-center justify-between gap-2">
+            <h2 id="movementsTitle" class="text-headline-sm text-on-surface truncate">Movimientos</h2>
+            <div class="flex items-center gap-3 shrink-0">
+              <button id="toggleMovementsBtn" data-action="toggle-movements" class="hidden text-label-md text-secondary font-semibold hover:underline" type="button">Ver todos</button>
+              <button class="text-label-md text-secondary font-semibold hover:underline" data-action="goto" data-view="estadisticas" type="button">Estadísticas</button>
             </div>
           </div>
+          <p class="text-[11px] text-outline -mt-1">Toca un movimiento para editarlo.</p>
 
-          <div id="recentTransactionsList" class="space-y-2">
-            <!-- Dynamically populated from state -->
-          </div>
+          <div id="recentTransactionsList" class="space-y-2"></div>
         </div>
 
       </section>
@@ -391,14 +375,23 @@
       <!-- VIEW 2: REGISTRAR (NUEVO MOVIMIENTO)           -->
       <!-- ============================================== -->
       <section id="view-registrar" class="view-panel px-4 space-y-3 pb-8">
-        
+
+        <!-- Aviso de edición -->
+        <div id="editBanner" class="hidden flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-secondary-container/50 text-on-secondary-container">
+          <span class="flex items-center gap-1.5 text-body-sm font-semibold">
+            <span class="material-symbols-outlined text-[18px]">edit</span>
+            Editando un registro existente
+          </span>
+          <button type="button" data-action="cancel-edit" class="text-label-md font-semibold hover:underline">Cancelar</button>
+        </div>
+
         <!-- Type Segmented Control -->
         <div id="typeSegment" class="w-full bg-surface-container-low p-1 rounded-xl shadow-xs flex items-center justify-between">
-          <button data-type="gasto" class="flex-1 py-1.5 px-3 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-1 shadow-xs transition-all font-semibold cursor-pointer" type="button">
+          <button data-action="set-type" data-type="gasto" class="flex-1 py-1.5 px-3 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-1 shadow-xs transition-all font-semibold cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">trending_down</span>
             Gasto
           </button>
-          <button data-type="ingreso" class="flex-1 py-1.5 px-3 rounded-lg text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface flex items-center justify-center gap-1 transition-all cursor-pointer" type="button">
+          <button data-action="set-type" data-type="ingreso" class="flex-1 py-1.5 px-3 rounded-lg text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface flex items-center justify-center gap-1 transition-all font-semibold cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">trending_up</span>
             Ingreso
           </button>
@@ -410,78 +403,67 @@
           <div class="absolute -left-10 -bottom-10 w-36 h-36 rounded-full bg-secondary/20 blur-xl pointer-events-none"></div>
 
           <div class="relative z-10 flex items-center gap-1.5 mb-1 flex-wrap justify-center">
-            <span class="text-on-primary-container font-label-md uppercase tracking-wider text-[11px]">Valor / Monto</span>
-            <span class="bg-surface-container-lowest/15 px-2 py-0.5 rounded-full text-primary-fixed text-[11px] font-bold">
-              COP ($)
-            </span>
+            <label for="expenseAmountInput" class="text-on-primary-container font-label-md uppercase tracking-wider text-[11px]">Valor / Monto</label>
+            <span class="bg-surface-container-lowest/15 px-2 py-0.5 rounded-full text-primary-fixed text-[11px] font-bold">COP ($)</span>
             <button type="button" onclick="quickConvertCadToCopPrompt()" class="bg-secondary-fixed/25 hover:bg-secondary-fixed/35 text-secondary-fixed text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors cursor-pointer" title="Convertir de Dólares Canadienses a COP">
               <span class="material-symbols-outlined text-[13px]">currency_exchange</span>
               De CAD a COP
             </button>
           </div>
 
-          <!-- Main Amount Interactive Display & Input -->
           <div class="relative z-10 flex items-center justify-center gap-1 my-0.5">
             <span class="text-primary-fixed text-2xl font-bold opacity-80">$</span>
-            <input id="expenseAmountInput" type="number" step="1000" min="0" placeholder="0" class="w-52 bg-transparent text-center font-data-metric text-[32px] leading-none tracking-tight font-bold text-on-primary outline-none border-b border-primary-fixed/30 focus:border-primary-fixed"/>
+            <input id="expenseAmountInput" type="number" inputmode="decimal" step="any" min="0" placeholder="0" class="w-52 bg-transparent text-center font-data-metric text-[32px] leading-none tracking-tight font-bold text-on-primary outline-none border-b border-primary-fixed/30 focus:border-primary-fixed placeholder:text-on-primary/40"/>
           </div>
 
           <p class="relative z-10 text-on-primary-container text-[11px] flex items-center gap-1 mt-0.5">
             <span class="material-symbols-outlined text-[13px] text-secondary-fixed">cloud_sync</span>
-            Se sincroniza con: <span class="font-semibold text-primary-fixed ml-0.5">BDGastosApp</span>
+            Se guarda en: <span id="syncTargetText" class="font-semibold text-primary-fixed ml-0.5">este dispositivo</span>
           </p>
+        </div>
+
+        <!-- Fecha -->
+        <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs border border-slate-100 flex items-center justify-between gap-3">
+          <label class="text-label-md font-bold text-on-surface flex items-center gap-1.5" for="regDateInput">
+            <span class="material-symbols-outlined text-[18px] text-secondary">event</span>
+            Fecha
+          </label>
+          <input id="regDateInput" type="date" class="h-10 px-3 rounded-lg bg-surface-container-low text-on-surface border border-slate-200 outline-none focus:ring-2 focus:ring-secondary"/>
         </div>
 
         <!-- SECCIÓN DINÁMICA: GASTOS (Macro-categoría -> Subcategoría -> Concepto) -->
         <div id="gastoFields" class="space-y-3">
-          <!-- 1. Macro-categoría -->
           <div class="space-y-1">
-            <label class="text-label-md font-bold text-on-surface block">1. Macro-categoría</label>
-            <div id="regMacroGrid" class="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
-              <!-- Cargado dinámicamente: Necesidades, Deseos, Deudas, Ahorros, Inversiones -->
-            </div>
+            <span class="text-label-md font-bold text-on-surface block">1. Macro-categoría</span>
+            <div id="regMacroGrid" class="grid grid-cols-3 sm:grid-cols-5 gap-1.5"></div>
           </div>
 
-          <!-- 2. Subcategoría -->
           <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs space-y-1.5 border border-slate-100">
             <div class="flex items-center justify-between">
               <span class="text-label-md text-on-surface font-bold">2. Subcategoría</span>
-              <span class="text-[11px] text-secondary font-medium">Dependiente de macro</span>
+              <button type="button" id="btnNewConceptInline" onclick="openCategoryModal()" class="text-[11px] text-secondary font-semibold flex items-center gap-0.5 hover:underline">
+                <span class="material-symbols-outlined text-[14px]">add</span> Nuevo concepto
+              </button>
             </div>
-            <div id="regSubcatList" class="flex flex-wrap gap-1.5 pt-0.5">
-              <!-- Cargado dinámicamente -->
-            </div>
+            <div id="regSubcatList" class="flex flex-wrap gap-1.5 pt-0.5"></div>
           </div>
 
-          <!-- 3. Concepto de Gasto -->
           <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs space-y-1.5 border border-slate-100">
             <label class="text-label-md text-on-surface font-bold block" for="regConceptoSelect">3. Concepto de Gasto</label>
-            <div class="relative">
-              <select id="regConceptoSelect" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary cursor-pointer">
-                <!-- Opciones según la subcategoría -->
-              </select>
-            </div>
+            <select id="regConceptoSelect" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary cursor-pointer"></select>
           </div>
         </div>
 
         <!-- SECCIÓN DINÁMICA: INGRESOS (Tipo de Ingreso -> Concepto de Ingreso) -->
         <div id="ingresoFields" class="space-y-3 hidden">
-          <!-- 1. Tipo de Ingreso -->
           <div class="space-y-1">
-            <label class="text-label-md font-bold text-on-surface block">1. Tipo de Ingreso</label>
-            <div id="regTipoIngresoGrid" class="grid grid-cols-2 gap-2">
-              <!-- Laboral, Gubernamental, Capacitación, Servicios -->
-            </div>
+            <span class="text-label-md font-bold text-on-surface block">1. Tipo de Ingreso</span>
+            <div id="regTipoIngresoGrid" class="grid grid-cols-2 gap-2"></div>
           </div>
 
-          <!-- 2. Concepto de Ingreso -->
           <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs space-y-1.5 border border-slate-100">
             <label class="text-label-md text-on-surface font-bold block" for="regConceptoIngresoSelect">2. Concepto de Ingreso</label>
-            <div class="relative">
-              <select id="regConceptoIngresoSelect" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary cursor-pointer">
-                <!-- Opciones según el tipo de ingreso -->
-              </select>
-            </div>
+            <select id="regConceptoIngresoSelect" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary cursor-pointer"></select>
           </div>
         </div>
 
@@ -490,7 +472,7 @@
           <label class="text-label-md font-semibold text-on-surface-variant block" for="expenseNote">Nota o descripción (opcional)</label>
           <div class="relative flex items-center">
             <span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">edit_note</span>
-            <input id="expenseNote" class="w-full h-11 pl-9 pr-3 rounded-lg bg-surface-container-low text-on-surface text-[15px] placeholder:text-outline focus:outline-none focus:bg-surface-container" placeholder="Ej. Pago mensual de arriendo" type="text"/>
+            <input id="expenseNote" maxlength="200" class="w-full h-11 pl-9 pr-3 rounded-lg bg-surface-container-low text-on-surface text-[15px] placeholder:text-outline focus:outline-none focus:bg-surface-container" placeholder="Ej. Pago mensual de arriendo" type="text"/>
           </div>
         </div>
 
@@ -498,11 +480,9 @@
         <div class="w-full pt-1 pb-4">
           <button id="saveExpenseBtn" class="w-full h-12 rounded-xl bg-primary text-on-primary font-label-lg font-bold flex items-center justify-center gap-2 shadow-md hover:bg-tertiary transition-transform active:scale-[0.98] cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[20px]">cloud_upload</span>
-            <span id="saveExpenseText">Guardar Gasto en Google Sheets</span>
+            <span id="saveExpenseText">Guardar Gasto</span>
           </button>
-          <p class="text-center text-[12px] text-on-surface-variant mt-1.5">
-            Se registrará en la pestaña correspondiente de tu Google Sheet
-          </p>
+          <p id="saveHintText" class="text-center text-[12px] text-on-surface-variant mt-1.5"></p>
         </div>
 
       </section>
@@ -511,103 +491,111 @@
       <!-- VIEW 3: ESTADÍSTICAS                           -->
       <!-- ============================================== -->
       <section id="view-estadisticas" class="view-panel px-margin space-y-space-md">
-        
-        <!-- Period Selector Segmented Pills -->
-        <div class="w-full flex items-center justify-between bg-surface-container-low p-1 rounded-xl shadow-xs">
-          <button class="flex-1 py-1.5 px-space-xs text-center rounded-lg font-label-md text-on-surface-variant hover:text-on-surface transition-all" type="button">
-            Semana
-          </button>
-          <button class="flex-1 py-1.5 px-space-xs text-center rounded-lg bg-primary-container text-on-primary font-label-md shadow-xs transition-all font-semibold" type="button">
-            Mes
-          </button>
-          <button class="flex-1 py-1.5 px-space-xs text-center rounded-lg font-label-md text-on-surface-variant hover:text-on-surface transition-all" type="button">
-            Año
-          </button>
-          <button class="flex-1 py-1.5 px-space-xs text-center rounded-lg font-label-md text-on-surface-variant hover:text-on-surface transition-all" type="button">
-            Total
-          </button>
+
+        <!-- Selector de periodo -->
+        <div id="statPeriodPills" class="w-full flex items-center justify-between bg-surface-container-low p-1 rounded-xl shadow-xs">
+          <button data-action="stats-period" data-period="semana" class="flex-1 py-1.5 px-space-xs text-center rounded-lg font-label-md text-on-surface-variant hover:text-on-surface transition-all" type="button">Semana</button>
+          <button data-action="stats-period" data-period="mes" class="flex-1 py-1.5 px-space-xs text-center rounded-lg font-label-md text-on-surface-variant hover:text-on-surface transition-all" type="button">Mes</button>
+          <button data-action="stats-period" data-period="anio" class="flex-1 py-1.5 px-space-xs text-center rounded-lg font-label-md text-on-surface-variant hover:text-on-surface transition-all" type="button">Año</button>
+          <button data-action="stats-period" data-period="total" class="flex-1 py-1.5 px-space-xs text-center rounded-lg font-label-md text-on-surface-variant hover:text-on-surface transition-all" type="button">Total</button>
         </div>
+        <p class="text-[11px] text-outline -mt-2 text-center">"Mes" y "Año" siguen el mes elegido en Inicio.</p>
 
         <!-- Metric Overview Card (Hero) -->
         <div class="relative overflow-hidden rounded-xl bg-primary-container text-on-primary p-space-lg shadow-xl">
           <div class="absolute -right-8 -top-8 w-44 h-44 rounded-full bg-secondary opacity-25 blur-2xl pointer-events-none"></div>
           <div class="relative z-10 flex flex-col gap-space-md">
-            <div class="flex items-center justify-between">
-              <span class="font-label-md text-on-primary-container tracking-wider uppercase">Gasto Total Acumulado</span>
-              <span class="inline-flex items-center gap-1 font-label-md px-2 py-0.5 rounded-full bg-secondary text-on-secondary shadow-sm font-semibold">
-                <span class="material-symbols-outlined text-[14px]">calendar_today</span> Noviembre
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-label-md text-on-primary-container tracking-wider uppercase">Gasto total</span>
+              <span class="inline-flex items-center gap-1 font-label-md px-2 py-0.5 rounded-full bg-secondary text-on-secondary shadow-sm font-semibold whitespace-nowrap">
+                <span class="material-symbols-outlined text-[14px]">calendar_today</span> <span id="statMonthLabel">Mes actual</span>
               </span>
             </div>
 
-            <div class="flex flex-col">
-              <div class="flex items-baseline gap-1">
-                <span id="statTotalExpense" class="font-display-lg-mobile text-on-primary font-bold tracking-tight">$1,350.00</span>
-                <span class="activeCurrencyText font-label-md text-on-primary-container">USD</span>
-              </div>
+            <div class="flex items-baseline gap-1">
+              <span id="statTotalExpense" class="text-display-lg-mobile font-display-lg-mobile text-on-primary font-bold tracking-tight">$0</span>
+              <span class="font-label-md text-on-primary-container">COP</span>
             </div>
 
-            <!-- Variance & Substats Grid -->
-            <div class="flex flex-col gap-space-sm pt-space-xs">
-              <div class="inline-flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-secondary-container text-on-secondary-container self-start">
-                <span class="material-symbols-outlined text-[18px]">trending_down</span>
-                <span class="font-label-md font-semibold">↓ 8.5% menos que el mes pasado</span>
-                <span class="text-label-md opacity-80">(Ahorro $125.00)</span>
+            <div class="flex flex-col gap-space-sm">
+              <div id="statComparison" class="hidden"></div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <div class="bg-black/10 rounded-lg p-2.5">
+                  <span class="font-body-sm text-on-primary/80 block">Ingresos</span>
+                  <span id="statIncome" class="font-data-sm text-secondary-fixed font-bold">$0</span>
+                </div>
+                <div class="bg-black/10 rounded-lg p-2.5">
+                  <span class="font-body-sm text-on-primary/80 block">Ahorro neto</span>
+                  <span id="statNet" class="font-data-sm text-secondary-fixed font-bold">$0</span>
+                </div>
               </div>
-              <div class="flex items-center justify-between pt-space-xs mt-space-xs bg-black/10 rounded-lg p-2.5 backdrop-blur-xs">
+
+              <div class="flex items-center justify-between bg-black/10 rounded-lg p-2.5">
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-secondary-fixed-dim text-[18px]">pace</span>
                   <span class="font-body-sm text-on-primary/90">Ritmo de gasto diario:</span>
                 </div>
-                <span id="statDailyPace" class="font-data-sm text-secondary-fixed font-bold">$45.00 / día</span>
+                <span id="statDailyPace" class="font-data-sm text-secondary-fixed font-bold">$0 / día</span>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Interactive Donut Breakdown Section -->
+        <!-- Donut por categorías -->
         <div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md gap-space-md">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-secondary text-[22px]">donut_large</span>
-              <h2 class="font-headline-sm text-on-surface">Distribución por Categorías</h2>
-            </div>
-            <button aria-label="Información adicional" class="text-on-surface-variant hover:text-on-surface" type="button" onclick="alert('El gráfico calcula la proporción real de tus gastos según los registros guardados.')">
-              <span class="material-symbols-outlined text-[20px]">info</span>
-            </button>
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-secondary text-[22px]">donut_large</span>
+            <h2 class="font-headline-sm text-on-surface">Distribución por Categorías</h2>
           </div>
 
-          <!-- SVG Donut Chart Visualizer -->
           <div class="relative flex items-center justify-center my-space-xs">
-            <svg id="donutSvgContainer" class="w-48 h-48 -rotate-90 transform" viewBox="0 0 160 160">
-              <!-- Dynamically populated circles -->
-            </svg>
-
-            <!-- Donut Center Badge -->
+            <svg id="donutSvgContainer" class="w-48 h-48 -rotate-90 transform" viewBox="0 0 160 160" role="img" aria-label="Distribución de gastos por categoría"></svg>
             <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
               <span class="font-label-md text-on-surface-variant uppercase tracking-wider">Total</span>
-              <span class="font-data-metric text-on-surface font-bold">Gastos</span>
-              <span class="font-body-sm text-secondary font-semibold">Categorizados</span>
+              <span id="donutCenterTotal" class="font-data-sm text-on-surface font-bold">$0</span>
             </div>
           </div>
 
-          <!-- Category Interactive Legend List -->
-          <div id="donutLegendContainer" class="flex flex-col gap-space-sm pt-space-xs">
-            <!-- Dynamically populated legend from app.js -->
+          <div id="donutLegendContainer" class="flex flex-col gap-space-sm pt-space-xs"></div>
+        </div>
+
+        <!-- Últimos 6 meses -->
+        <div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md gap-space-sm">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-secondary text-[22px]">bar_chart</span>
+              <h2 class="font-headline-sm text-on-surface">Últimos 6 meses</h2>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] text-on-surface-variant">
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-secondary-fixed-dim"></span>Ingresos</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-primary"></span>Gastos</span>
+            </div>
           </div>
+          <div id="statMonthlyBars" class="flex items-end gap-1 pt-2"></div>
+        </div>
+
+        <!-- Top conceptos -->
+        <div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md gap-space-sm mb-4">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-secondary text-[22px]">leaderboard</span>
+            <h2 class="font-headline-sm text-on-surface">Dónde más gastas</h2>
+          </div>
+          <div id="statTopConcepts" class="flex flex-col gap-2.5"></div>
         </div>
 
       </section>
 
       <!-- ============================================== -->
-      <!-- VIEW 4: CATEGORÍAS & PRESUPUESTOS              -->
+      <!-- VIEW 4: CATEGORÍAS                             -->
       <!-- ============================================== -->
       <section id="view-categorias" class="view-panel px-margin space-y-space-md">
-        
-        <!-- Top Search & Quick Action Header -->
+
+        <!-- Buscador y nuevo concepto -->
         <div class="flex items-center gap-space-sm pt-space-xs">
           <div class="flex-1 relative flex items-center bg-surface-container-lowest rounded-xl shadow-xs px-space-md h-12">
             <span class="material-symbols-outlined text-outline text-[20px] shrink-0">search</span>
-            <input id="categorySearch" class="w-full bg-transparent border-0 outline-none text-body-md text-on-surface placeholder:text-outline ml-space-xs" placeholder="Buscar categoría o etiqueta..." type="text"/>
+            <input id="categorySearch" aria-label="Buscar categoría" class="w-full bg-transparent border-0 outline-none text-body-md text-on-surface placeholder:text-outline ml-space-xs" placeholder="Buscar categoría o concepto..." type="search"/>
             <button id="clearSearch" aria-label="Limpiar búsqueda" class="text-outline hover:text-on-surface p-1 rounded-full hidden" type="button">
               <span class="material-symbols-outlined text-[18px]">close</span>
             </button>
@@ -618,102 +606,103 @@
           </button>
         </div>
 
-        <!-- Hero Budget Card: Resumen de Presupuesto Global Asignado -->
+        <!-- Resumen del presupuesto del mes -->
         <div class="relative overflow-hidden bg-primary-container text-on-primary rounded-xl p-space-lg shadow-xl shadow-primary-container/20">
           <div class="absolute -right-8 -top-8 w-40 h-40 bg-secondary-container/10 rounded-full blur-2xl pointer-events-none"></div>
           <div class="absolute right-0 bottom-0 opacity-10 pointer-events-none pr-4 pb-2">
             <span class="material-symbols-outlined text-[100px]">account_balance_wallet</span>
           </div>
           <div class="relative z-10 flex flex-col space-y-space-sm">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-secondary-container text-on-secondary-container">
-                  <span class="material-symbols-outlined text-[15px]">donut_large</span>
-                </span>
-                <span class="text-label-md tracking-wider uppercase opacity-90 font-medium">Presupuesto Mensual</span>
-              </div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-label-md tracking-wider uppercase opacity-90 font-medium">Presupuesto mensual</span>
               <div class="flex items-center gap-1 bg-surface-container-lowest/15 backdrop-blur-md px-2.5 py-1 rounded-full">
                 <span class="material-symbols-outlined text-[14px] text-secondary-fixed">calendar_today</span>
-                <span class="text-label-md text-on-primary font-semibold">Faltan 15 días</span>
+                <span id="catHeroDays" class="text-label-md text-on-primary font-semibold whitespace-nowrap"></span>
               </div>
             </div>
 
-            <div class="flex items-baseline gap-2 pt-1">
-              <span class="text-display-lg-mobile font-bold tracking-tight">$1,350</span>
-              <span class="text-body-md text-on-primary-container">de $2,200 presupuestados</span>
+            <div class="flex items-baseline flex-wrap gap-x-2 pt-1">
+              <span id="catHeroSpent" class="text-display-lg-mobile font-bold tracking-tight">$0</span>
+              <span id="catHeroBudget" class="text-body-md text-on-primary-container"></span>
             </div>
 
-            <!-- Linear progress bar with emerald glow -->
             <div class="space-y-1.5 pt-1">
               <div class="w-full h-3 bg-primary/60 rounded-full overflow-hidden p-0.5 backdrop-blur-sm">
-                <div class="h-full bg-gradient-to-r from-secondary-fixed via-secondary-container to-secondary-fixed-dim rounded-full transition-all duration-700 ease-out" style="width: 61.3%;"></div>
+                <div id="catHeroBar" class="h-full bg-gradient-to-r from-secondary-fixed via-secondary-container to-secondary-fixed-dim rounded-full transition-all duration-700 ease-out" style="width: 0%;"></div>
               </div>
               <div class="flex justify-between text-body-sm text-on-primary-container">
-                <span>61.3% consumido</span>
-                <span class="text-secondary-fixed font-semibold">$850 disponible</span>
+                <span id="catHeroPct"></span>
+                <span id="catHeroAvailable" class="text-secondary-fixed font-semibold"></span>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Filter Pills / Tabs -->
+        <!-- Filtros -->
         <div id="filterPills" class="flex items-center gap-2 overflow-x-auto pb-1">
-          <button data-filter="all" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 bg-primary text-on-primary shadow-xs font-semibold" type="button">
-            Todas
-          </button>
-          <button data-filter="active" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 bg-surface-container-lowest text-on-surface-variant hover:text-on-surface font-medium" type="button">
-            Con presupuesto activo
-          </button>
-          <button data-filter="unlimited" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 bg-surface-container-lowest text-on-surface-variant hover:text-on-surface font-medium" type="button">
-            Sin límite asignado
-          </button>
+          <button data-action="category-filter" data-filter="all" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 font-medium" type="button">Todas</button>
+          <button data-action="category-filter" data-filter="active" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 font-medium" type="button">Con presupuesto activo</button>
+          <button data-action="category-filter" data-filter="unlimited" class="px-3.5 py-2 rounded-xl text-label-md transition-all shrink-0 font-medium" type="button">Sin límite asignado</button>
         </div>
 
-        <!-- Categories & Subcategories List Feed -->
-        <div id="categoryFeed" class="space-y-space-md pb-6">
-          <!-- Dynamically populated from app.js -->
-        </div>
+        <div id="categoryFeed" class="space-y-space-md pb-6"></div>
 
       </section>
 
       <!-- ============================================== -->
-      <!-- VIEW 5: PRESUPUESTOS (VISTA DEDICADA)          -->
+      <!-- VIEW 5: PRESUPUESTOS                           -->
       <!-- ============================================== -->
       <section id="view-presupuestos" class="view-panel px-margin space-y-space-md">
-        <div class="p-6 bg-surface-container-lowest rounded-xl shadow-xs text-center space-y-3">
-          <div class="w-16 h-16 rounded-full bg-secondary-container/40 text-secondary flex items-center justify-center mx-auto">
-            <span class="material-symbols-outlined text-3xl">savings</span>
-          </div>
-          <h2 class="text-headline-md font-bold text-on-surface">Gestión de Presupuestos</h2>
-          <p class="text-body-md text-on-surface-variant">
-            Configura tus techos de gasto mensuales por categoría para recibir alertas inteligentes antes de excederlos.
-          </p>
-          <div class="pt-2">
-            <button onclick="switchView('categorias')" class="px-5 py-2.5 bg-primary text-on-primary rounded-xl font-label-lg shadow-sm hover:bg-tertiary transition-transform active:scale-95">
-              Administrar Límites por Categoría
-            </button>
+
+        <div class="relative overflow-hidden bg-primary-container text-on-primary rounded-xl p-space-lg shadow-xl">
+          <div class="absolute -right-8 -top-8 w-40 h-40 bg-secondary-container/10 rounded-full blur-2xl pointer-events-none"></div>
+          <div class="relative z-10 flex flex-col space-y-space-sm">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-label-md tracking-wider uppercase opacity-90 font-medium">Presupuesto total</span>
+              <span id="budgetHeroMonth" class="text-label-md font-semibold px-2.5 py-1 rounded-full bg-surface-container-lowest/15 whitespace-nowrap"></span>
+            </div>
+            <span id="budgetHeroTotal" class="text-display-lg-mobile font-bold tracking-tight">$0</span>
+            <div class="w-full h-2 bg-primary/60 rounded-full overflow-hidden">
+              <div id="budgetHeroBar" class="h-full bg-secondary-fixed-dim rounded-full transition-all duration-700" style="width: 0%;"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <div class="bg-black/10 rounded-lg p-2.5">
+                <span class="text-body-sm text-on-primary/80 block">Gastado</span>
+                <span id="budgetHeroSpent" class="text-label-lg font-bold">$0</span>
+              </div>
+              <div class="bg-black/10 rounded-lg p-2.5">
+                <span class="text-body-sm text-on-primary/80 block">Disponible</span>
+                <span id="budgetHeroRemaining" class="text-label-lg font-bold text-secondary-fixed">$0</span>
+              </div>
+            </div>
+            <p id="budgetHeroProjection" class="text-body-sm text-on-primary-container flex items-start gap-1"></p>
           </div>
         </div>
+
+        <div class="flex items-center justify-between">
+          <h2 class="text-headline-sm text-on-surface">Límites por categoría</h2>
+          <button type="button" data-action="reset-budgets" class="text-label-md text-secondary font-semibold hover:underline">Restablecer</button>
+        </div>
+        <p class="text-[11px] text-outline -mt-2">Edita el límite y se guarda al salir del campo. Los límites aplican a todos los meses.</p>
+
+        <div id="budgetList" class="space-y-space-sm pb-6"></div>
       </section>
 
     </main>
 
     <!-- Bottom Navigation Bar -->
-    <nav class="fixed bottom-0 inset-x-0 mx-auto max-w-md w-full z-50 pb-safe bg-surface-container-lowest/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(11,28,48,0.06)]" data-active-classes="text-secondary font-semibold">
+    <nav class="fixed bottom-0 inset-x-0 mx-auto max-w-md w-full z-40 pb-safe bg-surface-container-lowest/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(11,28,48,0.06)]" aria-label="Navegación principal">
       <div class="flex items-center justify-around h-16 px-gutter max-w-md mx-auto">
-        <!-- Tab: Inicio -->
         <a aria-current="page" class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 transition-colors text-secondary font-semibold" data-path="inicio" href="#">
           <span class="material-symbols-outlined text-[24px]">home</span>
           <span class="text-label-md">Inicio</span>
         </a>
 
-        <!-- Tab: Estadísticas -->
         <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="estadisticas" href="#">
           <span class="material-symbols-outlined text-[24px]">bar_chart</span>
           <span class="text-label-md">Estadísticas</span>
         </a>
 
-        <!-- Floating Central Add Button: Registrar -->
         <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] -mt-5 group" data-path="registrar" href="#">
           <div class="w-12 h-12 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_8px_16px_-2px_rgba(6,78,59,0.35)] active:scale-90 transition-transform group-hover:scale-105">
             <span class="material-symbols-outlined text-[26px]">add</span>
@@ -721,13 +710,11 @@
           <span class="text-label-md text-on-surface-variant group-hover:text-on-surface mt-1 font-medium">Registrar</span>
         </a>
 
-        <!-- Tab: Categorías -->
         <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="categorias" href="#">
           <span class="material-symbols-outlined text-[24px]">grid_view</span>
           <span class="text-label-md">Categorías</span>
         </a>
 
-        <!-- Tab: Presupuesto -->
         <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="presupuestos" href="#">
           <span class="material-symbols-outlined text-[24px]">account_balance_wallet</span>
           <span class="text-label-md">Presupuesto</span>
@@ -735,81 +722,135 @@
       </div>
     </nav>
 
-    <!-- Notification Sheet / Modal -->
-    <div id="notificationsModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end justify-center">
-      <div class="modal-sheet w-full max-w-md bg-surface-container-lowest rounded-t-2xl p-space-lg shadow-2xl space-y-space-md">
+    <!-- Notificaciones -->
+    <div id="notificationsModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-end justify-center" role="dialog" aria-modal="true" aria-labelledby="notifTitle">
+      <div class="modal-sheet w-full max-w-md bg-surface-container-lowest rounded-t-2xl p-space-lg pb-safe shadow-2xl space-y-space-md">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-secondary text-[22px]">notifications_active</span>
-            <h3 class="font-headline-sm text-on-surface">Notificaciones y Alertas</h3>
+            <h3 id="notifTitle" class="font-headline-sm text-on-surface">Alertas de este mes</h3>
           </div>
-          <button id="closeNotificationsBtn" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant" type="button">
+          <button data-action="close-modal" data-modal="notificationsModal" aria-label="Cerrar" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant" type="button">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div id="notificationsList" class="space-y-3 max-h-[60vh] overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <!-- Nuevo concepto de gasto -->
+    <div id="categoryModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="categoryModalTitle">
+      <div class="w-full max-w-sm bg-surface-container-lowest rounded-2xl p-space-lg shadow-2xl space-y-space-md border border-slate-200">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2 text-secondary">
+            <span class="material-symbols-outlined text-[24px]">new_label</span>
+            <h3 id="categoryModalTitle" class="font-headline-sm text-on-surface">Nuevo concepto de gasto</h3>
+          </div>
+          <button data-action="close-modal" data-modal="categoryModal" aria-label="Cerrar" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant" type="button">
             <span class="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
         <div class="space-y-3">
-          <div class="p-3 bg-error-container/40 rounded-xl flex items-start gap-3">
-            <span class="material-symbols-outlined text-error text-[20px] mt-0.5">warning</span>
-            <div>
-              <p class="text-body-sm font-semibold text-on-surface">Alerta de Alimentación</p>
-              <p class="text-body-sm text-on-surface-variant">Has consumido el 94.5% de tu presupuesto en Alimentación ($567.00 de $600.00).</p>
-            </div>
+          <div class="space-y-1">
+            <label class="text-label-md font-semibold text-on-surface block" for="newCatMacro">Macro-categoría</label>
+            <select id="newCatMacro" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface border border-slate-200 outline-none focus:ring-2 focus:ring-secondary"></select>
           </div>
-          <div class="p-3 bg-secondary-container/40 rounded-xl flex items-start gap-3">
-            <span class="material-symbols-outlined text-secondary text-[20px] mt-0.5">savings</span>
-            <div>
-              <p class="text-body-sm font-semibold text-on-surface">Meta de Ahorro en camino</p>
-              <p class="text-body-sm text-on-surface-variant">Llevas 8.5% menos de gasto comparado con el mes anterior. ¡Excelente ritmo!</p>
-            </div>
+          <div class="space-y-1">
+            <label class="text-label-md font-semibold text-on-surface block" for="newCatSub">Subcategoría</label>
+            <input id="newCatSub" list="newCatSubList" maxlength="60" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface border border-slate-200 outline-none focus:ring-2 focus:ring-secondary" placeholder="Existente o nueva (ej. Mascotas)" type="text"/>
+            <datalist id="newCatSubList"></datalist>
           </div>
+          <div class="space-y-1">
+            <label class="text-label-md font-semibold text-on-surface block" for="newCatConcept">Concepto</label>
+            <input id="newCatConcept" maxlength="80" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface border border-slate-200 outline-none focus:ring-2 focus:ring-secondary" placeholder="Ej. Comida para perro" type="text"/>
+          </div>
+          <p class="text-[11px] text-on-surface-variant">Se guarda en la app. Si sincronizas con Sheets, el registro llegará con esta subcategoría y concepto.</p>
         </div>
+        <button id="saveCategoryBtn" class="w-full h-11 bg-primary hover:bg-tertiary text-on-primary rounded-xl font-label-lg font-semibold shadow-xs transition-colors flex items-center justify-center gap-1.5" type="button">
+          <span class="material-symbols-outlined text-[18px]">save</span>
+          Guardar concepto
+        </button>
       </div>
     </div>
 
-    <!-- Modal de Configuración de Google Sheets -->
-    <div id="sheetsConfigModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div class="w-full max-w-sm bg-surface-container-lowest rounded-2xl p-space-lg shadow-2xl space-y-space-md border border-slate-200">
+    <!-- Ajustes y datos -->
+    <div id="sheetsConfigModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="w-full max-w-sm max-h-[90vh] overflow-y-auto bg-surface-container-lowest rounded-2xl p-space-lg shadow-2xl space-y-space-md border border-slate-200">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div class="flex items-center gap-2 text-secondary">
-            <span class="material-symbols-outlined text-[24px]">table_chart</span>
-            <h3 class="font-headline-sm text-on-surface">Conectar Google Sheets</h3>
+            <span class="material-symbols-outlined text-[24px]">settings</span>
+            <h3 id="settingsTitle" class="font-headline-sm text-on-surface">Ajustes y datos</h3>
           </div>
-          <button id="closeSheetsConfigBtn" onclick="closeSheetsConfigModal()" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant cursor-pointer" type="button">
+          <button id="closeSheetsConfigBtn" data-action="close-modal" data-modal="sheetsConfigModal" aria-label="Cerrar" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
-        <p class="text-body-sm text-on-surface-variant">
-          Pega la URL de tu aplicación web de Google Apps Script para sincronizar en tiempo real con <b>BDGastosApp</b>.
-        </p>
-        <div class="space-y-1">
-          <label class="text-label-md font-semibold text-on-surface block" for="googleScriptUrlInput">URL Webhook de Google Apps Script</label>
+
+        <!-- Google Sheets -->
+        <section class="space-y-2">
+          <h4 class="text-label-lg font-bold text-on-surface flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[18px] text-secondary">table_chart</span>
+            Google Sheets
+          </h4>
+          <p class="text-body-sm text-on-surface-variant">
+            Pega la URL de tu aplicación web de Google Apps Script para sincronizar con <b>BDGastosApp</b>. Déjala vacía para desconectar.
+          </p>
+          <label class="sr-only" for="googleScriptUrlInput">URL Webhook de Google Apps Script</label>
           <input id="googleScriptUrlInput" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm border border-slate-200 outline-none focus:ring-2 focus:ring-secondary" placeholder="https://script.google.com/macros/s/.../exec" type="url"/>
-        </div>
-        <div class="pt-2 flex flex-col gap-2">
+          <p id="syncStatusText" class="text-[12px] text-on-surface-variant"></p>
           <button id="saveSheetsUrlBtn" class="w-full h-11 bg-primary hover:bg-tertiary text-on-primary rounded-xl font-label-lg font-semibold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">save</span>
             Guardar URL
           </button>
-          
           <button id="reloadFromSheetsBtn" class="w-full h-10 bg-secondary-container text-on-secondary-container hover:bg-secondary-fixed rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">sync</span>
-            Cargar / Sincronizar desde Google Sheets
+            Cargar desde Google Sheets
           </button>
-
-          <hr class="border-slate-200 my-1"/>
-
-          <button id="resetLocalDataBtn" onclick="confirmResetAll()" class="w-full h-10 bg-error-container text-on-error-container hover:bg-error/20 rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
-            <span class="material-symbols-outlined text-[18px]">delete_sweep</span>
-            Vaciar registros (Empezar desde cero)
+          <button id="resendPendingBtn" class="hidden w-full h-10 bg-surface-container text-on-surface hover:bg-surface-container-high rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
+            <span class="material-symbols-outlined text-[18px]">cloud_upload</span>
+            Reenviar pendientes
           </button>
-        </div>
+        </section>
+
+        <hr class="border-slate-200"/>
+
+        <!-- Respaldos -->
+        <section class="space-y-2">
+          <h4 class="text-label-lg font-bold text-on-surface flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[18px] text-secondary">backup</span>
+            Respaldos
+          </h4>
+          <p id="dataStatsText" class="text-[12px] text-on-surface-variant"></p>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="exportJsonBtn" class="h-10 bg-surface-container text-on-surface hover:bg-surface-container-high rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1" type="button">
+              <span class="material-symbols-outlined text-[18px]">download</span>
+              Respaldo
+            </button>
+            <button id="exportCsvBtn" class="h-10 bg-surface-container text-on-surface hover:bg-surface-container-high rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1" type="button">
+              <span class="material-symbols-outlined text-[18px]">table_view</span>
+              Exportar CSV
+            </button>
+          </div>
+          <label class="w-full h-10 bg-surface-container text-on-surface hover:bg-surface-container-high rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer">
+            <span class="material-symbols-outlined text-[18px]">upload_file</span>
+            Importar respaldo (.json)
+            <input id="importJsonInput" type="file" accept="application/json,.json" class="sr-only"/>
+          </label>
+        </section>
+
+        <hr class="border-slate-200"/>
+
+        <button id="resetLocalDataBtn" onclick="confirmResetAll()" class="w-full h-10 bg-error-container text-on-error-container hover:bg-error/20 rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
+          <span class="material-symbols-outlined text-[18px]">delete_sweep</span>
+          Vaciar registros (empezar desde cero)
+        </button>
       </div>
     </div>
 
     <!-- Toast Notification Popup -->
-    <div id="toast" class="fixed top-5 z-50 max-w-sm px-4 py-3 bg-primary text-on-primary rounded-xl shadow-2xl flex items-center gap-2.5 text-body-md font-medium">
-      <span class="material-symbols-outlined text-secondary-fixed text-[20px]">check_circle</span>
-      <span id="toastMessage">Acción completada con éxito</span>
+    <div id="toast" role="status" aria-live="polite" class="fixed top-5 inset-x-4 mx-auto z-[60] max-w-sm px-4 py-3 bg-primary text-on-primary rounded-xl shadow-2xl flex items-center gap-2.5 text-body-md font-medium">
+      <span id="toastIcon" class="material-symbols-outlined text-secondary-fixed text-[20px] shrink-0">check_circle</span>
+      <span id="toastMessage"></span>
     </div>
 
   </div>

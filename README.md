@@ -1,80 +1,91 @@
 # 📱 GastosApp - Control de Gastos y Presupuestos
 
-Aplicación web moderna y responsive para la gestión de finanzas personales, registro de gastos e ingresos, control de presupuestos por categorías y análisis estadístico.
+Aplicación web *mobile-first* para finanzas personales: registra gastos e ingresos en pesos colombianos (COP), controla presupuestos mensuales por categoría y analiza en qué se va el dinero. Funciona sola en el navegador y, si quieres, se sincroniza con tu Google Sheet **BDGastosApp** a través de Google Apps Script.
 
-Diseño concebido e iterado con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado como una Single Page Application (SPA) ligera, rápida y sin dependencias pesadas.
+Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado como una SPA en JavaScript puro, sin dependencias ni paso de compilación.
 
 ---
 
 ## ✨ Características
 
-- 📊 **Dashboard Financiero Completo**:
-  - Balance total disponible con opción para alternar privacidad (`$2,450.00` ↔ `••••••••`).
-  - Desglose de ingresos vs. gastos del mes y cálculo de ahorro (+8.4%).
-  - Barra de consumo presupuestario global con estimación de días y saldo restante.
-- ➕ **Registro de Movimientos**:
-  - Clasificación por tipo: Gasto, Ingreso y Transferencia.
-  - Selector interactivo de moneda (USD, EUR, MXN).
-  - Categorías y subcategorías dinámicas (Alimentación, Transporte, Vivienda, Ocio, Salud, Educación).
-  - Métodos de pago (Visa Débito, Efectivo, Tarjeta de Crédito).
-  - Soporte para notas de concepto, simulación de comprobante/recibo y gastos recurrentes.
-- 📈 **Estadísticas y Análisis**:
-  - Gráfico Donut SVG interactivo con arcos proporcionales calculados en vivo.
-  - Ritmo de gasto diario y comparativas mensuales.
-  - Leyenda detallada por categoría con montos y porcentajes.
-- 🏷️ **Gestión de Categorías y Presupuestos**:
-  - Asignación y edición de techos presupuestarios por categoría.
-  - Alertas automáticas de consumo crítico (*"¡Casi al tope!"*).
-  - Acordeón de subcategorías y buscador en tiempo real.
-- 💾 **Persistencia Local**:
-  - Todos los datos se sincronizan automáticamente en el navegador mediante `localStorage`.
+- 📊 **Inicio**
+  - Balance total acumulado (con modo privacidad), ingresos y gastos del mes y tasa de ahorro.
+  - Selector de mes para revisar meses anteriores.
+  - Barra de presupuesto global con lo que queda y los días restantes del mes.
+  - Movimientos del mes: toca uno para **editarlo** o usa la papelera para borrarlo.
+- ➕ **Registrar**
+  - Gastos por macro-categoría → subcategoría → concepto (Necesidades, Deseos, Deudas, Ahorros, Inversiones).
+  - Ingresos por tipo → concepto.
+  - **Fecha editable** (para registrar movimientos de días anteriores) y nota opcional.
+  - Atajo para convertir un monto de CAD a COP con la tasa del día.
+- 📈 **Estadísticas**
+  - Periodos: últimos 7 días, mes, año y todo el historial.
+  - Comparación real con el periodo anterior equivalente, ingresos, ahorro neto y ritmo de gasto diario.
+  - Donut por categoría, barras de ingresos vs. gastos de los últimos 6 meses y top 5 de conceptos.
+- 🏷️ **Categorías**
+  - Buscador (ignora tildes), filtros por presupuesto y detalle de subcategorías y conceptos.
+  - **Conceptos propios**: añade subcategorías/conceptos nuevos desde la app (botón *Nueva*).
+- 💰 **Presupuesto**
+  - Límites mensuales editables en línea por macro-categoría, estado de cada uno y proyección de cierre de mes.
+- 🔔 **Alertas** de categorías cerca del tope o excedidas, gastos mayores que ingresos y registros sin sincronizar.
+- 💱 **Conversor COP ⇄ CAD** con tasa de mercado en vivo (open.er-api.com, con respaldo en exchangerate-api.com).
+- 💾 **Datos**
+  - Todo se guarda en el navegador (`localStorage`).
+  - Respaldo e importación en JSON y exportación a CSV desde *Ajustes*.
+- 📲 **PWA**: instalable en el celular y con caché sin conexión (service worker).
+
+---
+
+## 🔄 Sincronización con Google Sheets
+
+1. Publica tu Google Apps Script como aplicación web y copia la URL (`https://script.google.com/macros/s/.../exec`).
+2. En la app abre **Ajustes** (⚙️) y pega la URL.
+
+Cómo funciona:
+
+- Cada registro nuevo se envía por `POST` al script. Si no hay conexión queda **pendiente** (icono ☁️ tachado) y se reintenta solo al recuperar la red, o manualmente con *Reenviar pendientes*.
+- Al conectar Sheets por primera vez también se envían los registros creados en la app que nunca se habían enviado.
+- *Cargar desde Google Sheets* reemplaza los datos locales por los de la hoja, **conservando y reenviando** los pendientes.
+- Editar o borrar un registro que ya está en Sheets solo lo cambia en la app; en la hoja hay que corregirlo a mano.
+- Como el envío usa `mode: "no-cors"`, la app detecta fallos de red pero no errores internos del script.
+
+El script debe responder al `GET` con `{ "gastos": [[fecha, valor, macro, sub, concepto, nota], ...], "ingresos": [[fecha, valor, tipo, concepto, nota], ...] }` (la primera fila de cada lista son los encabezados).
 
 ---
 
 ## 🛠️ Tecnologías
 
-- **HTML5 & Vanilla JavaScript**: Lógica reactiva modular sin frameworks pesados.
-- **Tailwind CSS**: Tokens y paleta cromática extraída directamente del Design System de Stitch (Verde esmeralda Material 3).
-- **Tipografías e Iconografía**: Manrope, JetBrains Mono y Google Material Symbols Outlined.
-- **Backend / Dev Server**: Servidor estático nativo en Node.js (0 dependencias externas).
+- **HTML5 y JavaScript** sin frameworks.
+- **Tailwind CSS (CDN)** con la paleta del Design System de Stitch (verde esmeralda Material 3).
+- **Manrope, JetBrains Mono y Material Symbols Outlined**.
+- **Servidor estático en Node.js** sin dependencias.
 
 ---
 
-## 🚀 Instalación y Uso Local
+## 🚀 Uso local
 
-1. **Clonar el repositorio**:
-   ```bash
-   git clone https://github.com/santiagocaor/gastosapp.git
-   cd gastosapp
-   ```
+```bash
+npm start
+```
 
-2. **Iniciar la aplicación**:
-   ```bash
-   npm start
-   # o directamente:
-   node server.js
-   ```
-
-3. **Abrir en el navegador**:
-   Visita [http://localhost:3000](http://localhost:3000)
+Luego abre [http://localhost:3000](http://localhost:3000). El servidor solo entrega archivos del proyecto (bloquea rutas fuera de la carpeta y archivos ocultos como `.git`).
 
 ---
 
-## 📁 Estructura del Proyecto
+## 📁 Estructura del proyecto
 
 ```text
 ├── assets/
-│   └── logo.svg                 # Logo oficial vectorial de GastosApp
-├── stitch_export/               # Pantallas originales descargadas desde Stitch
-│   ├── inicio.html
-│   ├── registrar_gasto.html
-│   ├── categorias_presupuestos.html
-│   ├── estadisticas.html
-│   └── logo.svg
-├── index.html                   # SPA unificada interactiva
-├── app.js                       # Estado global, cálculos reactivos y navegación
-├── styles.css                   # Animaciones, transiciones y estilos visuales
-├── server.js                    # Servidor HTTP ligero en Node.js
+│   ├── logo.svg                 # Logo vectorial
+│   ├── icon-192.png             # Iconos PWA
+│   └── icon-512.png
+├── stitch_export/               # Pantallas originales de Stitch (referencia de diseño)
+├── index.html                   # SPA: vistas, modales y configuración de Tailwind
+├── app.js                       # Estado, cálculos, render, sincronización y conversor
+├── styles.css                   # Animaciones y transiciones
+├── sw.js                        # Service worker (red primero, caché de respaldo)
+├── manifest.webmanifest         # Manifiesto PWA
+├── server.js                    # Servidor HTTP estático
 ├── package.json
 └── README.md
 ```
