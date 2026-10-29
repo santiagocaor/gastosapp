@@ -285,6 +285,57 @@ class AppState {
     }
   }
 
+  clearAllMovements() {
+    this.data.gastos = [];
+    this.data.ingresos = [];
+    this.save();
+  }
+
+  async fetchFromGoogleSheets() {
+    if (!this.data.googleScriptUrl) {
+      alert("Por favor configura primero la URL de tu Google Apps Script.");
+      return;
+    }
+    try {
+      showToast("Descargando registros desde Google Sheets...");
+      const res = await fetch(this.data.googleScriptUrl);
+      const data = await res.json();
+      if (data) {
+        // Gastos: omitir fila 0 de encabezados
+        if (Array.isArray(data.gastos)) {
+          this.data.gastos = data.gastos.slice(1).filter(r => r[0] && r[1]).map((r, i) => ({
+            id: "tx_g_gs_" + i,
+            fecha: typeof r[0] === 'string' ? r[0].split('T')[0] : r[0],
+            valor: Number(String(r[1]).replace(/[^0-9.-]+/g,"")) || 0,
+            macroCategoria: r[2] || "Necesidades",
+            subcategoria: r[3] || "Varios",
+            concepto: r[4] || "",
+            nota: r[5] || "",
+            displayDate: typeof r[0] === 'string' ? r[0].split('T')[0] : r[0]
+          }));
+        }
+        // Ingresos: omitir fila 0 de encabezados
+        if (Array.isArray(data.ingresos)) {
+          this.data.ingresos = data.ingresos.slice(1).filter(r => r[0] && r[1]).map((r, i) => ({
+            id: "tx_i_gs_" + i,
+            fecha: typeof r[0] === 'string' ? r[0].split('T')[0] : r[0],
+            valor: Number(String(r[1]).replace(/[^0-9.-]+/g,"")) || 0,
+            tipoIngreso: r[2] || "Laboral",
+            concepto: r[3] || "",
+            nota: r[4] || "",
+            displayDate: typeof r[0] === 'string' ? r[0].split('T')[0] : r[0]
+          }));
+        }
+        this.save();
+        renderAll();
+        showToast("¡Datos sincronizados con éxito desde Google Sheets!");
+      }
+    } catch (err) {
+      console.error("Error al cargar de Google Sheets:", err);
+      showToast("Error al leer desde Google Sheets");
+    }
+  }
+
   deleteGasto(id) {
     this.data.gastos = this.data.gastos.filter(g => g.id !== id);
     this.save();
@@ -876,6 +927,26 @@ function initSheetsConfigModal() {
   const closeBtn = document.getElementById('closeSheetsConfigBtn');
   const saveBtn = document.getElementById('saveSheetsUrlBtn');
   const input = document.getElementById('googleScriptUrlInput');
+
+  const reloadBtn = document.getElementById('reloadFromSheetsBtn');
+  const resetBtn = document.getElementById('resetLocalDataBtn');
+
+  if (reloadBtn) {
+    reloadBtn.addEventListener('click', async () => {
+      await state.fetchFromGoogleSheets();
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (confirm('¿Deseas reiniciar todos los registros a cero en la aplicación? Tu balance quedará en $0.')) {
+        state.clearAllMovements();
+        renderAll();
+        if (modal) modal.classList.remove('open');
+        showToast('Registros reiniciados a cero');
+      }
+    });
+  }
 
   if (openBtn && modal) {
     openBtn.addEventListener('click', () => {

@@ -710,9 +710,22 @@
           <label class="text-label-md font-semibold text-on-surface block" for="googleScriptUrlInput">URL Webhook de Google Apps Script</label>
           <input id="googleScriptUrlInput" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm border border-slate-200 outline-none focus:ring-2 focus:ring-secondary" placeholder="https://script.google.com/macros/s/.../exec" type="url"/>
         </div>
-        <div class="pt-2 flex gap-2">
-          <button id="saveSheetsUrlBtn" class="flex-1 h-11 bg-primary hover:bg-tertiary text-on-primary rounded-xl font-label-lg font-semibold shadow-xs transition-colors" type="button">
-            Guardar y Sincronizar
+        <div class="pt-2 flex flex-col gap-2">
+          <button id="saveSheetsUrlBtn" class="w-full h-11 bg-primary hover:bg-tertiary text-on-primary rounded-xl font-label-lg font-semibold shadow-xs transition-colors flex items-center justify-center gap-1.5" type="button">
+            <span class="material-symbols-outlined text-[18px]">save</span>
+            Guardar URL
+          </button>
+          
+          <button id="reloadFromSheetsBtn" class="w-full h-10 bg-secondary-container text-on-secondary-container hover:bg-secondary-fixed rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5" type="button">
+            <span class="material-symbols-outlined text-[18px]">sync</span>
+            Cargar / Sincronizar desde Google Sheets
+          </button>
+
+          <hr class="border-slate-200 my-1"/>
+
+          <button id="resetLocalDataBtn" class="w-full h-10 bg-error-container text-on-error-container hover:bg-error/20 rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5" type="button">
+            <span class="material-symbols-outlined text-[18px]">delete_sweep</span>
+            Vaciar registros (Empezar desde cero)
           </button>
         </div>
       </div>
