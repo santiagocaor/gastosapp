@@ -197,8 +197,47 @@ function toAmount(v) {
   return Number(s) || 0;
 }
 
+// ---------- Monedas ----------
+// Cada movimiento guarda `valor` en COP (columna "Valor" de Sheets). Los registrados en CAD
+// guardan además moneda: 'CAD', montoOriginal (en CAD) y tasa (COP por 1 CAD de ese día).
+
+function cadRate() {
+  return CONVERTER_STATE.rateCadToCop > 0 ? CONVERTER_STATE.rateCadToCop : 1;
+}
+
+function displayCurrency() {
+  return state.data.displayCurrency === 'COP' ? 'COP' : 'CAD';
+}
+
+// Valor del movimiento expresado en COP para sumar. Si se muestran totales en CAD, los
+// movimientos hechos en CAD aportan su monto original exacto (montoOriginal × tasa de hoy,
+// que al dividir entre la misma tasa vuelve a dar el monto original).
+function itemCOP(item) {
+  if (displayCurrency() === 'CAD' && item.moneda === 'CAD' && Number(item.montoOriginal) > 0) {
+    return Number(item.montoOriginal) * cadRate();
+  }
+  return Number(item.valor || 0);
+}
+
+function toDisplay(cop) {
+  return displayCurrency() === 'CAD' ? cop / cadRate() : cop;
+}
+
+function fromDisplay(amount) {
+  return displayCurrency() === 'CAD' ? amount * cadRate() : amount;
+}
+
+function formatCurrency(amount, currency) {
+  const n = Number(amount || 0);
+  const sign = n < 0 ? '-' : '';
+  if (currency === 'CAD') {
+    return `${sign}CA$${Math.abs(n).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return `${sign}$${Math.round(Math.abs(n)).toLocaleString('es-CO')}`;
+}
+
 function sumValor(items) {
-  return items.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+  return items.reduce((sum, item) => sum + itemCOP(item), 0);
 }
 
 // Escapa texto antes de insertarlo con innerHTML
@@ -333,6 +372,11 @@ class AppState {
     if (![0, 1, 2].includes(d.sheetsProtocol)) d.sheetsProtocol = 0;
     if (!Array.isArray(d.pendingDeletes)) d.pendingDeletes = [];
     if (typeof d.lastPull !== 'number') d.lastPull = 0;
+    if (!['COP', 'CAD'].includes(d.displayCurrency)) d.displayCurrency = 'CAD';
+    if (!['COP', 'CAD'].includes(d.registroMoneda)) d.registroMoneda = 'CAD';
+    if (!['COP', 'CAD'].includes(d.presupuestoMoneda)) d.presupuestoMoneda = 'COP';
+    if (typeof d.sheetsVersion !== 'number') d.sheetsVersion = 0;
+    if (!Array.isArray(d.recurrentes)) d.recurrentes = [];
   }
 
   save() {
@@ -344,11 +388,9 @@ class AppState {
     }
   }
 
-  formatMoney(amount) {
-    const sym = this.data.currency ? this.data.currency.sym : '$';
-    const n = Math.round(Number(amount || 0));
-    const sign = n < 0 ? '-' : '';
-    return `${sign}${sym}${Math.abs(n).toLocaleString('es-CO')}`;
+  // Recibe un monto en COP y lo muestra en la moneda elegida (CAD o COP)
+  formatMoney(amountCOP) {
+    return formatCurrency(toDisplay(Number(amountCOP || 0)), displayCurrency());
   }
 
   gastosEntre(start, end) {
@@ -379,13 +421,35 @@ class AppState {
     const totals = {};
     Object.keys(BD_GASTOS).forEach(macro => { totals[macro] = 0; });
     gastos.forEach(g => {
-      if (totals[g.macroCategoria] !== undefined) totals[g.macroCategoria] += Number(g.valor || 0);
+      if (totals[g.macroCategoria] !== undefined) totals[g.macroCategoria] += itemCOP(g);
     });
     return totals;
   }
 
+  // Los presupuestos se guardan en la moneda en que se editaron (presupuestoMoneda);
+  // para comparar con los gastos se pasan a COP.
+  budgetCOP(macro) {
+    const v = Number(this.data.presupuestos[macro] || 0);
+    return this.data.presupuestoMoneda === 'CAD' ? v * cadRate() : v;
+  }
+
   getGlobalBudget() {
-    return Object.values(this.data.presupuestos).reduce((a, b) => a + Number(b || 0), 0);
+    return Object.keys(this.data.presupuestos).reduce((a, macro) => a + this.budgetCOP(macro), 0);
+  }
+
+  // Guarda un límite escrito en la moneda que se está mostrando. Si esa moneda no es la de
+  // los presupuestos, todos se convierten a ella para que queden fijos en esa moneda.
+  setBudget(macro, amountDisplay) {
+    const cur = displayCurrency();
+    if (this.data.presupuestoMoneda !== cur) {
+      Object.keys(this.data.presupuestos).forEach(m => {
+        const cop = this.budgetCOP(m);
+        this.data.presupuestos[m] = cur === 'CAD' ? Math.round(cop / cadRate()) : Math.round(cop);
+      });
+      this.data.presupuestoMoneda = cur;
+    }
+    this.data.presupuestos[macro] = cur === 'CAD' ? Math.round(amountDisplay * 100) / 100 : Math.round(amountDisplay);
+    this.save();
   }
 
   list(type) {
@@ -397,6 +461,10 @@ class AppState {
   }
 
   payload(type, item) {
+    // Moneda original (el script v3 la guarda en columnas aparte; los anteriores la ignoran)
+    const currency = item.moneda === 'CAD'
+      ? { currency: 'CAD', originalAmount: item.montoOriginal, rate: item.tasa }
+      : { currency: 'COP', originalAmount: '', rate: '' };
     if (type === 'gasto') {
       return {
         type: "gasto",
@@ -407,7 +475,8 @@ class AppState {
         concept: item.concepto,
         amount: item.valor,
         note: item.nota || "",
-        paymentMethod: item.nota || "" // nombre que usaba el script antiguo
+        paymentMethod: item.nota || "", // nombre que usaba el script antiguo
+        ...currency
       };
     }
     return {
@@ -418,12 +487,13 @@ class AppState {
       concept: item.concepto,
       amount: item.valor,
       note: item.nota || "",
-      paymentMethod: item.nota || ""
+      paymentMethod: item.nota || "",
+      ...currency
     };
   }
 
   async addMovement(type, item) {
-    item.id = newId(type === 'gasto' ? 'tx_g_' : 'tx_i_');
+    item.id = item.id || newId(type === 'gasto' ? 'tx_g_' : 'tx_i_');
     item.fecha = isIsoDate(item.fecha) ? item.fecha : localISODate();
     item.createdAt = Date.now();
     item.synced = false; // pendiente hasta que llegue a Google Sheets
@@ -559,11 +629,16 @@ class AppState {
     let error = null;
     if (data && data.version >= 2) {
       protocol = 2;
+      this.data.sheetsVersion = data.version;
     } else if (data && data.ok === false && /clave/i.test(data.error || '')) {
-      // Script v2 con clave: se confirma por POST
+      // Script v2+ con clave: se confirma por POST
       const ping = await this.callSheets({ action: 'ping' });
-      if (ping.ok) protocol = 2;
-      else error = ping.error || 'Clave incorrecta';
+      if (ping.ok) {
+        protocol = 2;
+        this.data.sheetsVersion = ping.version || 2;
+      } else {
+        error = ping.error || 'Clave incorrecta';
+      }
     } else if (data && Array.isArray(data.gastos)) {
       protocol = 1;
     } else {
@@ -585,6 +660,13 @@ class AppState {
         : { id: "tx_i_gs_" + i, fecha: normalizeSheetDate(r[0]), valor: toAmount(r[1]), tipoIngreso: r[2] || "Laboral", concepto: r[3] || "", nota: r[4] || "", synced: true };
     }
     const base = { id: String(r.id), fecha: normalizeSheetDate(String(r.fecha || '')), valor: toAmount(r.valor), concepto: r.concepto || "", nota: r.nota || "", synced: true, remote: true };
+    // Movimientos creados por un recurrente (en este u otro dispositivo): rec_<plantilla>_<mes>
+    if (base.id.startsWith('rec_')) base.recurrenteId = base.id.split('_')[1];
+    if (r.moneda === 'CAD' && toAmount(r.montoOriginal) > 0) {
+      Object.assign(base, { moneda: 'CAD', montoOriginal: toAmount(r.montoOriginal), tasa: toAmount(r.tasa) || (base.valor / toAmount(r.montoOriginal)) });
+    } else if (r.moneda === 'COP') {
+      base.moneda = 'COP';
+    }
     return type === 'gasto'
       ? { ...base, macroCategoria: r.macroCategoria || "Necesidades", subcategoria: r.subcategoria || "Varios" }
       : { ...base, tipoIngreso: r.tipoIngreso || "Laboral" };
@@ -628,11 +710,20 @@ class AppState {
           const local = this.data[key];
           const pending = local.filter(m => m.synced === false);
           const pendingIds = new Set(pending.map(m => m.id));
-          const createdAt = new Map(local.map(m => [m.id, m.createdAt]));
+          const localById = new Map(local.map(m => [m.id, m]));
           const fromSheet = remote[key]
             .map((r, i) => this.remoteToLocal(type, r, i))
             .filter(m => !pendingIds.has(m.id) && !deleted.has(`${type}:${m.id}`))
-            .map(m => (createdAt.get(m.id) ? { ...m, createdAt: createdAt.get(m.id) } : m));
+            .map(m => {
+              const prev = localById.get(m.id);
+              if (!prev) return m;
+              const merged = { ...m, createdAt: prev.createdAt, recurrenteId: prev.recurrenteId };
+              // Script sin columnas de moneda: se conserva la moneda original guardada en la app
+              if (!m.moneda && prev.moneda === 'CAD' && Math.round(prev.valor) === Math.round(m.valor)) {
+                Object.assign(merged, { moneda: 'CAD', montoOriginal: prev.montoOriginal, tasa: prev.tasa });
+              }
+              return merged;
+            });
           this.data[key] = [...pending, ...fromSheet];
         });
 
@@ -665,14 +756,15 @@ class AppState {
 
   exportCSV() {
     const cell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['Tipo', 'Fecha', 'Valor', 'Categoría', 'Subcategoría', 'Concepto', 'Nota']];
+    const rows = [['Tipo', 'Fecha', 'Valor (COP)', 'Categoría', 'Subcategoría', 'Concepto', 'Nota', 'Moneda', 'Monto original', 'Tasa CAD→COP']];
     [...this.data.gastos.map(g => ({ ...g, t: 'Gasto' })), ...this.data.ingresos.map(i => ({ ...i, t: 'Ingreso' }))]
       .sort(sortMovements)
       .forEach(m => rows.push([
         m.t, m.fecha, m.valor,
         m.t === 'Gasto' ? m.macroCategoria : m.tipoIngreso,
         m.t === 'Gasto' ? m.subcategoria : '',
-        m.concepto, m.nota
+        m.concepto, m.nota,
+        m.moneda === 'CAD' ? 'CAD' : 'COP', m.moneda === 'CAD' ? m.montoOriginal : '', m.moneda === 'CAD' ? m.tasa : ''
       ]));
     return '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n');
   }
@@ -728,13 +820,17 @@ document.addEventListener('DOMContentLoaded', () => {
   initCategorySearch();
   initCurrencyConverter();
   switchView(state.data.activeTab || 'inicio', { scroll: false });
+  processRecurring();
   backgroundSync();
   registerServiceWorker();
 });
 
 window.addEventListener('online', () => backgroundSync({ force: true }));
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') backgroundSync();
+  if (document.visibilityState === 'visible') {
+    processRecurring();
+    backgroundSync();
+  }
 });
 
 // Sincronización silenciosa: al abrir la app, al volver a ella y al recuperar la conexión.
@@ -782,7 +878,7 @@ const VIEW_TITLES = {
 
 function switchView(viewName, { scroll = true } = {}) {
   if (!VIEW_TITLES[viewName]) viewName = 'inicio';
-  if (viewName !== 'registrar' && form.editing) resetForm();
+  if (viewName !== 'registrar' && (form.editing || form.fromTemplate)) resetForm();
 
   state.data.activeTab = viewName;
   state.save();
@@ -802,7 +898,7 @@ function switchView(viewName, { scroll = true } = {}) {
 
   const titleEl = document.getElementById('headerTitle');
   const backBtn = document.getElementById('headerBackBtn');
-  if (titleEl) titleEl.textContent = viewName === 'registrar' && form.editing ? 'Editar registro' : VIEW_TITLES[viewName];
+  if (titleEl) titleEl.textContent = viewName === 'registrar' && form.editing ? 'Editar registro' : viewName === 'registrar' && form.fromTemplate ? 'Registrar recurrente' : VIEW_TITLES[viewName];
   if (backBtn) backBtn.classList.toggle('hidden', viewName !== 'registrar');
 
   if (scroll) window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -864,23 +960,47 @@ function initActions() {
       case 'remove-concept': removeCustomConcept(d.macro, d.sub, d.concepto); break;
       case 'use-concept': useConcept(d.macro, d.sub, d.concepto); break;
       case 'reset-budgets': resetBudgets(); break;
+      case 'set-form-currency': setFormCurrency(d.currency); break;
+      case 'toggle-display-currency':
+        state.data.displayCurrency = displayCurrency() === 'CAD' ? 'COP' : 'CAD';
+        state.save();
+        renderAll();
+        showToast(`Mostrando montos en ${displayCurrency()}`, 'info');
+        break;
+      case 'open-recurring':
+        closeModal('sheetsConfigModal');
+        renderRecurringModal();
+        openModal('recurringModal');
+        break;
+      case 'rec-register':
+      case 'rec-edit':
+      case 'rec-skip':
+      case 'rec-toggle-mode':
+      case 'rec-toggle-active':
+      case 'rec-delete':
+        handleRecurringAction(d.action, d.tpl, d.month);
+        break;
       case 'open-modal': openModal(d.modal); break;
       case 'close-modal': closeModal(d.modal); break;
     }
   });
 
-  // Presupuestos editables en línea
+  // Presupuestos y montos de recurrentes editables en línea
   document.addEventListener('change', (e) => {
+    const recInput = e.target.closest('input[data-rec-amount]');
+    if (recInput) {
+      updateRecurringAmount(recInput.dataset.recAmount, recInput.value);
+      return;
+    }
     const input = e.target.closest('input[data-budget]');
     if (!input) return;
     const num = Number(input.value);
     if (input.value.trim() === '' || !Number.isFinite(num) || num < 0) {
       showToast('Introduce un monto válido para el presupuesto', 'error');
-      input.value = state.data.presupuestos[input.dataset.budget] || 0;
+      input.value = budgetInputValue(input.dataset.budget);
       return;
     }
-    state.data.presupuestos[input.dataset.budget] = Math.round(num);
-    state.save();
+    state.setBudget(input.dataset.budget, num);
     renderAll();
     showToast(`Presupuesto de ${input.dataset.budget} actualizado`);
   });
@@ -932,6 +1052,18 @@ function renderAll() {
   renderStatisticsView();
   renderNotifications();
   renderSettingsStatus();
+  renderRecurringCard();
+  if (document.getElementById('recurringModal')?.classList.contains('open')) renderRecurringModal();
+  renderCurrencyLabels();
+}
+
+function renderCurrencyLabels() {
+  const cur = displayCurrency();
+  setText('displayCurrencyLabel', cur);
+  setText('statCurrencyLabel', cur);
+  setText('budgetCurrencyNote', cur === 'CAD'
+    ? 'Montos en CAD. Los gastos hechos en COP se convierten con la tasa de hoy.'
+    : 'Montos en COP. Los gastos hechos en CAD se muestran con la tasa del día en que se registraron.');
 }
 
 function setText(id, text) {
@@ -1040,6 +1172,14 @@ function movementRow(m) {
   const pending = m.synced === false && state.data.googleScriptUrl
     ? `<span class="material-symbols-outlined text-[14px] text-outline align-middle" title="Pendiente de enviar a Google Sheets">cloud_off</span>`
     : '';
+  const recurring = m.recurrenteId
+    ? `<span class="material-symbols-outlined text-[14px] text-secondary align-middle" title="Movimiento recurrente">event_repeat</span>`
+    : '';
+  // Monto en la moneda original cuando no coincide con la que se está mostrando
+  const itemCurrency = m.moneda === 'CAD' ? 'CAD' : 'COP';
+  const original = itemCurrency !== displayCurrency()
+    ? `<span class="text-[11px] text-outline whitespace-nowrap">${formatCurrency(itemCurrency === 'CAD' ? m.montoOriginal : m.valor, itemCurrency)}</span>`
+    : '';
 
   return `
     <div role="button" tabindex="0" data-action="edit" data-type="${m.type}" data-id="${escapeHtml(m.id)}" class="p-3 bg-surface-container-lowest rounded-xl shadow-xs flex items-center justify-between transition-colors hover:bg-surface-container-low active:bg-surface-container-low group cursor-pointer" title="Toca para editar">
@@ -1049,12 +1189,15 @@ function movementRow(m) {
         </div>
         <div class="flex flex-col min-w-0">
           <span class="text-body-md font-semibold text-on-surface truncate">${title}</span>
-          <span class="text-body-sm text-on-surface-variant truncate">${subtitle} • ${escapeHtml(formatDisplayDate(m.fecha))} ${pending}</span>
+          <span class="text-body-sm text-on-surface-variant truncate">${subtitle} • ${escapeHtml(formatDisplayDate(m.fecha))} ${recurring}${pending}</span>
           ${m.nota ? `<span class="text-[11px] text-outline truncate italic">${escapeHtml(m.nota)}</span>` : ''}
         </div>
       </div>
       <div class="flex items-center gap-1 shrink-0 pl-2">
-        <span class="font-data-metric text-[15px] tracking-tight ${color} whitespace-nowrap">${sign}${state.formatMoney(m.valor)}</span>
+        <span class="flex flex-col items-end leading-tight">
+          <span class="font-data-metric text-[15px] tracking-tight ${color} whitespace-nowrap">${sign}${state.formatMoney(itemCOP(m))}</span>
+          ${original}
+        </span>
         <button aria-label="Eliminar" data-action="delete" data-type="${m.type}" data-id="${escapeHtml(m.id)}" class="[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus:opacity-100 p-1.5 rounded-full text-on-surface-variant hover:text-error hover:bg-error-container/40 transition-opacity" type="button">
           <span class="material-symbols-outlined text-[18px]">delete</span>
         </button>
@@ -1168,7 +1311,7 @@ function renderCategoriesView() {
 
   const cards = Object.keys(categorias).map(macro => {
     const conf = categorias[macro];
-    const limit = Number(state.data.presupuestos[macro] || 0);
+    const limit = state.budgetCOP(macro);
     if (ui.categoryFilter === 'active' && limit <= 0) return '';
     if (ui.categoryFilter === 'unlimited' && limit > 0) return '';
 
@@ -1376,7 +1519,7 @@ function renderBudgetsView() {
 
   container.innerHTML = Object.keys(BD_GASTOS).map(macro => {
     const conf = BD_GASTOS[macro];
-    const limit = Number(state.data.presupuestos[macro] || 0);
+    const limit = state.budgetCOP(macro);
     const spent = macroTotals[macro] || 0;
     const pctRaw = limit > 0 ? (spent / limit) * 100 : 0;
     const projected = b.isCurrent && day > 0 ? (spent / day) * dim : spent;
@@ -1411,8 +1554,8 @@ function renderBudgetsView() {
           <label class="flex items-center gap-1.5 text-body-sm text-on-surface-variant">
             Límite
             <span class="relative">
-              <span class="absolute left-2 top-1/2 -translate-y-1/2 text-outline text-[13px]">$</span>
-              <input type="number" inputmode="numeric" min="0" step="10000" data-budget="${m}" value="${limit}" class="w-32 h-9 pl-5 pr-2 rounded-lg bg-surface-container-low border border-slate-200 text-right text-on-surface font-semibold outline-none focus:ring-2 focus:ring-secondary" aria-label="Presupuesto mensual de ${m}"/>
+              <span class="absolute left-2 top-1/2 -translate-y-1/2 text-outline text-[12px]">${displayCurrency() === 'CAD' ? 'CA$' : '$'}</span>
+              <input type="number" inputmode="decimal" min="0" step="any" data-budget="${m}" value="${budgetInputValue(macro)}" class="w-32 h-9 pl-9 pr-2 rounded-lg bg-surface-container-low border border-slate-200 text-right text-on-surface font-semibold outline-none focus:ring-2 focus:ring-secondary" aria-label="Presupuesto mensual de ${m}"/>
             </span>
           </label>
         </div>
@@ -1421,9 +1564,16 @@ function renderBudgetsView() {
   }).join('');
 }
 
+// Límite en la moneda que se está mostrando, para el campo editable
+function budgetInputValue(macro) {
+  const v = toDisplay(state.budgetCOP(macro));
+  return displayCurrency() === 'CAD' ? Math.round(v * 100) / 100 : Math.round(v);
+}
+
 function resetBudgets() {
   if (!confirm('¿Restablecer los presupuestos sugeridos para todas las categorías?')) return;
   state.data.presupuestos = { ...PRESUPUESTOS_DEFAULT };
+  state.data.presupuestoMoneda = 'COP';
   state.save();
   renderAll();
   showToast('Presupuestos restablecidos');
@@ -1562,7 +1712,7 @@ function renderTopConcepts(gastos, totalSpent) {
   gastos.forEach(g => {
     const k = g.concepto || g.subcategoria || 'Sin concepto';
     byConcept[k] = byConcept[k] || { amt: 0, n: 0, macro: g.macroCategoria };
-    byConcept[k].amt += Number(g.valor || 0);
+    byConcept[k].amt += itemCOP(g);
     byConcept[k].n += 1;
   });
   const top = Object.entries(byConcept).sort((a, b) => b[1].amt - a[1].amt).slice(0, 5);
@@ -1594,7 +1744,7 @@ function computeAlerts() {
   const alerts = [];
 
   Object.keys(BD_GASTOS).forEach(macro => {
-    const limit = Number(state.data.presupuestos[macro] || 0);
+    const limit = state.budgetCOP(macro);
     if (limit <= 0) return;
     const spent = macroTotals[macro] || 0;
     const pct = (spent / limit) * 100;
@@ -1608,6 +1758,9 @@ function computeAlerts() {
   const pending = state.pendingCount();
   if (pending > 0 && state.data.googleScriptUrl) {
     alerts.push({ level: 'info', icon: 'cloud_off', title: 'Cambios sin sincronizar', text: `${pending} cambio(s) aún no llegan a Google Sheets. Se reintentará al recuperar la conexión.` });
+  }
+  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 3) {
+    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v3)', text: 'La nueva versión de apps-script/Code.gs guarda en la hoja la moneda original (CAD) y la tasa de cada movimiento.' });
   }
   if (state.data.googleScriptUrl && state.data.sheetsProtocol === 1) {
     alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script', text: 'Con el script antiguo, editar o borrar no llega a Google Sheets. Reemplázalo por apps-script/Code.gs para sincronizar en ambos sentidos.' });
@@ -1652,6 +1805,248 @@ function renderNotifications() {
       </div>`).join('');
 }
 
+// --------------------------------------------------------
+// Movimientos recurrentes (arriendo, nómina, suscripciones...)
+// Cada plantilla genera como máximo un movimiento por mes, con id fijo
+// rec_<plantilla>_<YYYY-MM>: así nunca se duplica, ni entre dispositivos ni en Sheets.
+// --------------------------------------------------------
+function addRecurring(type, item, modo) {
+  const tpl = {
+    id: 'rc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    type,
+    modo: modo === 'auto' ? 'auto' : 'proponer',
+    activo: true,
+    dia: Number(String(item.fecha).slice(8)) || 1,
+    ultimo: String(item.fecha).slice(0, 7), // último mes ya registrado u omitido
+    datos: {
+      macroCategoria: item.macroCategoria,
+      subcategoria: item.subcategoria,
+      tipoIngreso: item.tipoIngreso,
+      concepto: item.concepto,
+      nota: item.nota,
+      moneda: item.moneda === 'CAD' ? 'CAD' : 'COP',
+      montoOriginal: item.montoOriginal,
+      valor: item.valor
+    },
+    creado: Date.now()
+  };
+  state.data.recurrentes.push(tpl);
+  state.save();
+  return tpl;
+}
+
+function recurringDueDate(tpl, monthKey) {
+  return `${monthKey}-${String(Math.min(tpl.dia, daysInMonth(monthKey))).padStart(2, '0')}`;
+}
+
+function recurringMovementId(tpl, monthKey) {
+  return `rec_${tpl.id}_${monthKey}`;
+}
+
+// Meses posteriores al último registrado cuya fecha ya llegó (máximo 12 hacia atrás)
+function recurringDuePeriods(tpl) {
+  const today = localISODate();
+  const out = [];
+  let k = shiftMonth(tpl.ultimo, 1);
+  const oldest = shiftMonth(today.slice(0, 7), -11);
+  if (k < oldest) k = oldest;
+  while (k <= today.slice(0, 7)) {
+    if (recurringDueDate(tpl, k) <= today) out.push(k);
+    k = shiftMonth(k, 1);
+  }
+  return out;
+}
+
+function recurringFields(tpl, monthKey) {
+  const d = tpl.datos;
+  const rate = Math.round(cadRate() * 100) / 100;
+  const money = d.moneda === 'CAD'
+    ? { valor: Math.round(Number(d.montoOriginal) * rate), moneda: 'CAD', montoOriginal: Number(d.montoOriginal), tasa: rate }
+    : { valor: Math.round(Number(d.valor)), moneda: 'COP' };
+  const base = { ...money, fecha: recurringDueDate(tpl, monthKey), concepto: d.concepto, nota: d.nota || '', recurrenteId: tpl.id };
+  return tpl.type === 'gasto'
+    ? { ...base, macroCategoria: d.macroCategoria, subcategoria: d.subcategoria }
+    : { ...base, tipoIngreso: d.tipoIngreso };
+}
+
+function markRecurringDone(tpl, monthKey) {
+  if (monthKey > tpl.ultimo) tpl.ultimo = monthKey;
+  state.save();
+}
+
+// Crea el movimiento de un mes si aún no existe
+function createRecurring(tpl, monthKey) {
+  const id = recurringMovementId(tpl, monthKey);
+  if (!state.find(tpl.type, id)) {
+    state.addMovement(tpl.type, { ...recurringFields(tpl, monthKey), id }).then(renderAll);
+  }
+  markRecurringDone(tpl, monthKey);
+}
+
+// Registra solos los recurrentes automáticos que ya vencieron; devuelve cuántos creó
+function processRecurring() {
+  let created = 0;
+  state.data.recurrentes.filter(t => t.activo && t.modo === 'auto').forEach(tpl => {
+    recurringDuePeriods(tpl).forEach(k => {
+      if (!state.find(tpl.type, recurringMovementId(tpl, k))) created++;
+      createRecurring(tpl, k);
+    });
+  });
+  if (created > 0) {
+    renderAll();
+    showToast(`Se registraron ${created} movimiento(s) recurrente(s)`);
+  }
+  return created;
+}
+
+// Recurrentes "proponer" pendientes: el mes más antiguo de cada uno
+function recurringProposals() {
+  return state.data.recurrentes
+    .filter(t => t.activo && t.modo === 'proponer')
+    .map(tpl => {
+      const periods = recurringDuePeriods(tpl).filter(k => !state.find(tpl.type, recurringMovementId(tpl, k)));
+      return periods.length ? { tpl, monthKey: periods[0], count: periods.length } : null;
+    })
+    .filter(Boolean);
+}
+
+function recurringAmountText(tpl) {
+  const d = tpl.datos;
+  return d.moneda === 'CAD' ? formatCurrency(d.montoOriginal, 'CAD') : formatCurrency(d.valor, 'COP');
+}
+
+function recurringIcon(tpl) {
+  return tpl.type === 'gasto' ? (BD_GASTOS[tpl.datos.macroCategoria]?.icon || 'event_repeat') : (BD_INGRESOS[tpl.datos.tipoIngreso]?.icon || 'event_repeat');
+}
+
+function renderRecurringCard() {
+  const card = document.getElementById('recurringCard');
+  const list = document.getElementById('recurringProposals');
+  if (!card || !list) return;
+  const proposals = recurringProposals();
+  card.classList.toggle('hidden', proposals.length === 0);
+  setText('recurringCount', String(proposals.reduce((a, p) => a + p.count, 0)));
+
+  list.innerHTML = proposals.map(({ tpl, monthKey, count }) => `
+    <div class="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-surface-container-lowest">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-9 h-9 rounded-full ${tpl.type === 'gasto' ? 'bg-secondary-container/40 text-secondary' : 'bg-secondary text-on-secondary'} flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-[18px]">${recurringIcon(tpl)}</span>
+        </div>
+        <div class="min-w-0">
+          <p class="text-body-sm font-semibold text-on-surface truncate">${escapeHtml(tpl.datos.concepto)}</p>
+          <p class="text-[11px] text-on-surface-variant truncate">${tpl.type === 'gasto' ? '-' : '+'}${recurringAmountText(tpl)} · ${escapeHtml(formatDisplayDate(recurringDueDate(tpl, monthKey)))}${count > 1 ? ` · ${count} meses pendientes` : ''}</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button type="button" data-action="rec-skip" data-tpl="${tpl.id}" data-month="${monthKey}" class="px-2 py-1 rounded-lg text-[11px] font-semibold text-on-surface-variant hover:bg-surface-container" title="Omitir este mes">Omitir</button>
+        <button type="button" data-action="rec-edit" data-tpl="${tpl.id}" data-month="${monthKey}" class="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container" aria-label="Revisar antes de registrar"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+        <button type="button" data-action="rec-register" data-tpl="${tpl.id}" data-month="${monthKey}" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-primary text-on-primary hover:bg-tertiary">Registrar</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderRecurringModal() {
+  const list = document.getElementById('recurringList');
+  if (!list) return;
+  const items = [...state.data.recurrentes].sort((a, b) => a.dia - b.dia);
+  list.innerHTML = items.length === 0
+    ? `<div class="p-4 text-center text-body-sm text-on-surface-variant bg-surface-container-low rounded-xl">
+         Aún no tienes recurrentes. Al registrar un gasto o ingreso marca <b>“Repetir cada mes”</b>.
+       </div>`
+    : items.map(tpl => {
+      const cur = tpl.datos.moneda === 'CAD' ? 'CAD' : 'COP';
+      const amount = cur === 'CAD' ? tpl.datos.montoOriginal : tpl.datos.valor;
+      return `
+        <div class="p-3 rounded-xl bg-surface-container-low space-y-2 ${tpl.activo ? '' : 'opacity-60'}">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="material-symbols-outlined text-[20px] text-secondary">${recurringIcon(tpl)}</span>
+              <div class="min-w-0">
+                <p class="text-body-sm font-semibold text-on-surface truncate">${escapeHtml(tpl.datos.concepto)}</p>
+                <p class="text-[11px] text-on-surface-variant">${tpl.type === 'gasto' ? 'Gasto' : 'Ingreso'} · día ${tpl.dia} de cada mes${tpl.activo ? '' : ' · en pausa'}</p>
+              </div>
+            </div>
+            <button type="button" data-action="rec-delete" data-tpl="${tpl.id}" class="p-1 rounded-full text-on-surface-variant hover:text-error" aria-label="Eliminar recurrente"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+          </div>
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <label class="flex items-center gap-1 text-[12px] text-on-surface-variant">
+              Monto
+              <span class="relative">
+                <span class="absolute left-2 top-1/2 -translate-y-1/2 text-outline text-[11px]">${cur === 'CAD' ? 'CA$' : '$'}</span>
+                <input type="number" inputmode="decimal" min="0" step="any" data-rec-amount="${tpl.id}" value="${amount}" class="w-28 h-8 pl-8 pr-2 rounded-lg bg-surface-container-lowest border border-slate-200 text-right text-on-surface font-semibold outline-none focus:ring-2 focus:ring-secondary" aria-label="Monto del recurrente"/>
+              </span>
+            </label>
+            <div class="flex items-center gap-1">
+              <button type="button" data-action="rec-toggle-mode" data-tpl="${tpl.id}" class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-surface-container-lowest hover:bg-surface-container" title="Cambiar modo">
+                ${tpl.modo === 'auto' ? '⚡ Automático' : '🔔 Proponer'}
+              </button>
+              <button type="button" data-action="rec-toggle-active" data-tpl="${tpl.id}" class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-surface-container-lowest hover:bg-surface-container">
+                ${tpl.activo ? 'Pausar' : 'Reanudar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+}
+
+function handleRecurringAction(action, tplId, monthKey) {
+  const tpl = state.data.recurrentes.find(t => t.id === tplId);
+  if (!tpl) return;
+  switch (action) {
+    case 'rec-register':
+      createRecurring(tpl, monthKey);
+      showToast(`${tpl.datos.concepto}: ${recurringAmountText(tpl)} registrado`);
+      break;
+    case 'rec-edit':
+      startFromTemplate(tplId, monthKey);
+      return;
+    case 'rec-skip':
+      markRecurringDone(tpl, monthKey);
+      showToast(`${tpl.datos.concepto} omitido en ${monthLabel(monthKey).toLowerCase()}`, 'info');
+      break;
+    case 'rec-toggle-mode':
+      tpl.modo = tpl.modo === 'auto' ? 'proponer' : 'auto';
+      state.save();
+      if (tpl.modo === 'auto') processRecurring();
+      break;
+    case 'rec-toggle-active':
+      tpl.activo = !tpl.activo;
+      // Al reanudar no se recuperan los meses en pausa
+      if (tpl.activo) {
+        const prev = shiftMonth(currentMonthKey(), -1);
+        if (tpl.ultimo < prev) tpl.ultimo = prev;
+      }
+      state.save();
+      if (tpl.activo) processRecurring();
+      break;
+    case 'rec-delete':
+      if (!confirm(`¿Eliminar el recurrente "${tpl.datos.concepto}"?\nLos movimientos ya registrados no se borran.`)) return;
+      state.data.recurrentes = state.data.recurrentes.filter(t => t.id !== tplId);
+      state.save();
+      break;
+  }
+  renderAll();
+}
+
+function updateRecurringAmount(tplId, value) {
+  const tpl = state.data.recurrentes.find(t => t.id === tplId);
+  const num = Number(value);
+  if (!tpl) return;
+  if (!Number.isFinite(num) || num <= 0) {
+    showToast('Introduce un monto válido', 'error');
+    renderRecurringModal();
+    return;
+  }
+  if (tpl.datos.moneda === 'CAD') tpl.datos.montoOriginal = Math.round(num * 100) / 100;
+  else tpl.datos.valor = Math.round(num);
+  state.save();
+  renderAll();
+  showToast('Monto del recurrente actualizado (aplica desde el próximo mes)');
+}
+
 // ========================================================
 // FORMULARIO DE REGISTRO
 // (Gasto: Macro -> Sub -> Concepto | Ingreso: Tipo -> Concepto)
@@ -1661,19 +2056,87 @@ function initForm() {
   document.getElementById('regConceptoIngresoSelect')?.addEventListener('change', e => { form.conceptoIngreso = e.target.value; });
   document.getElementById('saveExpenseBtn')?.addEventListener('click', saveForm);
   document.getElementById('expenseAmountInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') saveForm(); });
+  document.getElementById('expenseAmountInput')?.addEventListener('input', renderFormCurrency);
+  document.getElementById('regDateInput')?.addEventListener('change', renderFormRecurrence);
+  document.getElementById('regRecurrente')?.addEventListener('change', renderFormRecurrence);
   resetForm();
 }
 
 function resetForm() {
   form.editing = null;
+  form.fromTemplate = null;
+  form.moneda = state.data.registroMoneda;
   const amt = document.getElementById('expenseAmountInput');
   const nota = document.getElementById('expenseNote');
   const date = document.getElementById('regDateInput');
+  const rec = document.getElementById('regRecurrente');
+  const modo = document.getElementById('regRecurrenteModo');
   if (amt) amt.value = '';
   if (nota) nota.value = '';
   if (date) date.value = localISODate();
+  if (rec) rec.checked = false;
+  if (modo) modo.value = 'proponer';
   document.getElementById('editBanner')?.classList.add('hidden');
   renderFormSelectors();
+}
+
+function setFormCurrency(currency) {
+  form.moneda = currency === 'COP' ? 'COP' : 'CAD';
+  // Se recuerda para el próximo registro
+  state.data.registroMoneda = form.moneda;
+  state.save();
+  renderFormCurrency();
+}
+
+// Selector de moneda del monto y equivalencia en la otra moneda
+function renderFormCurrency() {
+  const cur = form.moneda || state.data.registroMoneda;
+  document.querySelectorAll('#amountCurrencySegment [data-currency]').forEach(btn => {
+    const active = btn.dataset.currency === cur;
+    btn.classList.toggle('bg-surface-container-lowest', active);
+    btn.classList.toggle('text-primary', active);
+    btn.classList.toggle('text-primary-fixed', !active);
+    btn.setAttribute('aria-pressed', active);
+  });
+  setText('amountCurrencyPrefix', cur === 'CAD' ? 'CA$' : '$');
+  const val = parseFloat(document.getElementById('expenseAmountInput')?.value) || 0;
+  const rate = formRate();
+  const rateTxt = `1 CAD = ${formatCurrency(rate, 'COP')} COP`;
+  setText('amountEquivalent', val > 0
+    ? (cur === 'CAD' ? `≈ ${formatCurrency(val * rate, 'COP')} COP · ${rateTxt}` : `≈ ${formatCurrency(val / rate, 'CAD')} · ${rateTxt}`)
+    : rateTxt);
+}
+
+// Tasa a usar: la del registro original si se edita uno en CAD, si no la de hoy
+function formRate() {
+  if (form.editing) {
+    const prev = state.find(form.editing.type, form.editing.id);
+    if (prev && prev.moneda === 'CAD' && prev.tasa > 0) return prev.tasa;
+  }
+  return cadRate();
+}
+
+function renderFormRecurrence() {
+  const box = document.getElementById('regRecurrenceBox');
+  const linked = document.getElementById('regRecurrenceLinked');
+  const options = document.getElementById('regRecurrenteOptions');
+  const checkbox = document.getElementById('regRecurrente');
+  if (!box) return;
+
+  const item = form.editing ? state.find(form.editing.type, form.editing.id) : null;
+  const tpl = item && item.recurrenteId ? state.data.recurrentes.find(t => t.id === item.recurrenteId) : null;
+  const isLinked = !!tpl || !!form.fromTemplate;
+  box.classList.toggle('hidden', isLinked);
+  linked?.classList.toggle('hidden', !isLinked);
+  if (isLinked) {
+    const t = tpl || state.data.recurrentes.find(r => r.id === form.fromTemplate.tplId);
+    setText('regRecurrenceLinkedText', t ? `Movimiento recurrente: el día ${t.dia} de cada mes.` : 'Movimiento recurrente.');
+  }
+
+  const fecha = document.getElementById('regDateInput')?.value || localISODate();
+  const dia = Number(fecha.slice(8)) || 1;
+  setText('regRecurrenteDia', `Se repetirá el día ${dia} de cada mes${dia > 28 ? ' (o el último día en meses más cortos)' : ''}.`);
+  options?.classList.toggle('hidden', !checkbox?.checked);
 }
 
 function setFormType(type) {
@@ -1779,6 +2242,8 @@ function renderFormSyncHints() {
       : form.editing.synced && hasSheets ? 'Los cambios se guardan en la app; en Google Sheets corrígelo a mano.' : 'Los cambios se guardan en este dispositivo.')
     : (hasSheets ? 'Se registrará en la pestaña correspondiente de tu Google Sheet' : 'Se guarda en este dispositivo. Conecta Google Sheets en Ajustes para sincronizar.'));
   setText('syncTargetText', hasSheets ? 'BDGastosApp' : 'este dispositivo');
+  renderFormCurrency();
+  renderFormRecurrence();
 }
 
 function startEdit(type, id) {
@@ -1794,12 +2259,38 @@ function startEdit(type, id) {
     form.tipoIngreso = item.tipoIngreso;
     form.conceptoIngreso = item.concepto || '';
   }
+  form.moneda = item.moneda === 'CAD' ? 'CAD' : 'COP';
   switchView('registrar');
 
-  document.getElementById('expenseAmountInput').value = item.valor;
+  document.getElementById('expenseAmountInput').value = item.moneda === 'CAD' ? item.montoOriginal : item.valor;
   document.getElementById('expenseNote').value = item.nota || '';
   document.getElementById('regDateInput').value = isIsoDate(item.fecha) ? item.fecha : localISODate();
+  document.getElementById('regRecurrente').checked = false;
   document.getElementById('editBanner')?.classList.remove('hidden');
+  renderFormSelectors();
+}
+
+// Abre el formulario con los datos de un recurrente para revisarlo antes de registrarlo
+function startFromTemplate(tplId, monthKey) {
+  const tpl = state.data.recurrentes.find(t => t.id === tplId);
+  if (!tpl) return;
+  resetForm();
+  const d = tpl.datos;
+  form.type = tpl.type;
+  form.fromTemplate = { tplId, monthKey };
+  form.moneda = d.moneda === 'CAD' ? 'CAD' : 'COP';
+  if (tpl.type === 'gasto') {
+    form.macro = d.macroCategoria;
+    form.sub = d.subcategoria;
+    form.concepto = d.concepto || '';
+  } else {
+    form.tipoIngreso = d.tipoIngreso;
+    form.conceptoIngreso = d.concepto || '';
+  }
+  switchView('registrar');
+  document.getElementById('expenseAmountInput').value = d.moneda === 'CAD' ? d.montoOriginal : d.valor;
+  document.getElementById('expenseNote').value = d.nota || '';
+  document.getElementById('regDateInput').value = recurringDueDate(tpl, monthKey);
   renderFormSelectors();
 }
 
@@ -1817,15 +2308,37 @@ async function saveForm() {
   const dateVal = document.getElementById('regDateInput')?.value;
   const fecha = isIsoDate(dateVal) ? dateVal : localISODate();
 
+  // En CAD se guarda el monto original y la tasa; `valor` queda en COP para totales y Sheets
+  const rate = Math.round(formRate() * 100) / 100;
+  const money = form.moneda === 'CAD'
+    ? { valor: Math.round(val * rate), moneda: 'CAD', montoOriginal: val, tasa: rate }
+    : { valor: Math.round(val), moneda: 'COP', montoOriginal: undefined, tasa: undefined };
+
   const fields = form.type === 'gasto'
-    ? { valor: val, fecha, macroCategoria: form.macro, subcategoria: form.sub, concepto: document.getElementById('regConceptoSelect')?.value || form.concepto, nota }
-    : { valor: val, fecha, tipoIngreso: form.tipoIngreso, concepto: document.getElementById('regConceptoIngresoSelect')?.value || form.conceptoIngreso, nota };
+    ? { ...money, fecha, macroCategoria: form.macro, subcategoria: form.sub, concepto: document.getElementById('regConceptoSelect')?.value || form.concepto, nota }
+    : { ...money, fecha, tipoIngreso: form.tipoIngreso, concepto: document.getElementById('regConceptoIngresoSelect')?.value || form.conceptoIngreso, nota };
 
   const label = form.type === 'gasto' ? 'Gasto' : 'Ingreso';
+  const wantsRecurring = document.getElementById('regRecurrente')?.checked;
+  const recurringMode = document.getElementById('regRecurrenteModo')?.value === 'auto' ? 'auto' : 'proponer';
+  const amountText = formatCurrency(val, form.moneda);
 
-  if (form.editing) {
+  if (form.fromTemplate) {
+    // Registro de un recurrente propuesto (id fijo por mes: no se duplica)
+    const { tplId, monthKey } = form.fromTemplate;
+    const tpl = state.data.recurrentes.find(t => t.id === tplId);
+    if (tpl) {
+      state.addMovement(tpl.type, { ...fields, id: recurringMovementId(tpl, monthKey), recurrenteId: tpl.id }).then(renderAll);
+      markRecurringDone(tpl, monthKey);
+    }
+    showToast(`${label} recurrente de ${amountText} registrado`);
+  } else if (form.editing) {
     const { type, id, synced } = form.editing;
     const item = state.updateMovement(type, id, fields);
+    if (item && wantsRecurring && !item.recurrenteId) {
+      item.recurrenteId = addRecurring(type, item, recurringMode).id;
+      state.save();
+    }
     if (item && item.synced === false && state.data.googleScriptUrl) {
       state.syncItem(type, item).then(ok => {
         renderAll();
@@ -1837,13 +2350,22 @@ async function saveForm() {
       : 'Registro actualizado');
   } else {
     const type = form.type;
-    state.addMovement(type, fields).then(item => {
+    const promise = state.addMovement(type, fields);
+    // addMovement agrega el registro de inmediato; el envío a Sheets sigue en segundo plano
+    const created = state.list(type)[0];
+    if (wantsRecurring && created) {
+      created.recurrenteId = addRecurring(type, created, recurringMode).id;
+      state.save();
+    }
+    promise.then(item => {
       if (state.data.googleScriptUrl && item.synced === false) {
         showToast(`${label} guardado; se enviará a Google Sheets al recuperar la conexión`, 'info');
       }
       renderAll();
     });
-    showToast(`${label} de ${state.formatMoney(val)} registrado`);
+    showToast(wantsRecurring
+      ? `${label} de ${amountText} registrado y programado cada mes`
+      : `${label} de ${amountText} registrado`);
   }
 
   // Ver el mes del registro guardado
@@ -2064,6 +2586,7 @@ async function fetchLiveExchangeRate(isManualRefresh = false) {
 
       updateConverterUI();
       calculateConversion();
+      renderAll(); // los montos en CAD dependen de la tasa
       if (isManualRefresh) {
         showToast(`Cotización actualizada: 1 CAD = $${Math.round(CONVERTER_STATE.rateCadToCop).toLocaleString('es-CO')} COP`);
       }
@@ -2085,6 +2608,7 @@ async function fetchLiveExchangeRate(isManualRefresh = false) {
 
         updateConverterUI();
         calculateConversion();
+        renderAll();
         if (isManualRefresh) {
           showToast(`Cotización actualizada: 1 CAD = $${Math.round(CONVERTER_STATE.rateCadToCop).toLocaleString('es-CO')} COP`);
         }
@@ -2228,26 +2752,6 @@ window.copyConversionResult = function() {
   }
 };
 
-// Atajo en formulario de Registrar: permite ingresar en CAD y se convierte al instante a COP
-window.quickConvertCadToCopPrompt = async function() {
-  // Asegurar que tengamos la tasa más fresca del momento
-  if (!CONVERTER_STATE.lastUpdated || (Date.now() - CONVERTER_STATE.lastUpdated.getTime() > 1000 * 60 * 30)) {
-    await fetchLiveExchangeRate(false);
-  }
-
-  const cadInput = prompt(`Cotización actual: 1 CAD = $${Math.round(CONVERTER_STATE.rateCadToCop).toLocaleString('es-CO')} COP\n\nIngresa el monto en Dólares Canadienses (CAD):`, "50");
-  if (cadInput !== null) {
-    const val = parseFloat(cadInput.replace(/,/g, '.'));
-    if (!isNaN(val) && val > 0) {
-      const copTotal = Math.round(val * CONVERTER_STATE.rateCadToCop);
-      const input = document.getElementById('expenseAmountInput');
-      if (input) {
-        input.value = copTotal;
-        showToast(`$${val} CAD convertidos a $${copTotal.toLocaleString('es-CO')} COP`);
-      }
-    }
-  }
-};
 
 
 

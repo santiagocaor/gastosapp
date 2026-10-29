@@ -1,5 +1,5 @@
 /**
- * GastosApp ⇄ Google Sheets (BDGastosApp) — protocolo v2
+ * GastosApp ⇄ Google Sheets (BDGastosApp) — protocolo v3
  *
  * Pega este archivo en Extensiones → Apps Script de tu hoja y publícalo como
  * aplicación web (Ejecutar como: tú · Acceso: cualquier usuario).
@@ -12,8 +12,10 @@
  *   update              → igual que upsert
  *   delete              → borra la fila con ese id (no falla si ya no existe)
  *
- * Las columnas existentes no cambian: si la hoja no tiene una columna "ID",
- * se agrega al final y se rellenan los ids de las filas antiguas.
+ * Las columnas existentes no cambian: si la hoja no tiene las columnas "ID",
+ * "Moneda", "Monto original" y "Tasa CAD→COP", se agregan al final (se buscan
+ * por su encabezado, así que puedes moverlas) y se rellenan los ids de las
+ * filas antiguas. "Valor" sigue siempre en COP.
  */
 
 const CONFIG = {
@@ -33,8 +35,14 @@ const CONFIG = {
   }
 };
 
-const VERSION = 2;
+const VERSION = 3;
 const ID_HEADER = 'ID';
+// Columnas opcionales que se ubican por su encabezado: [campo, encabezado]
+const EXTRA_COLUMNS = [
+  ['moneda', 'Moneda'],
+  ['montoOriginal', 'Monto original'],
+  ['tasa', 'Tasa CAD→COP']
+];
 
 function doGet(e) {
   // Compatibilidad: sin clave configurada, GET devuelve el listado
@@ -93,17 +101,20 @@ function sheet_(type) {
     sh.appendRow(conf.headers.concat(ID_HEADER));
   }
   if (sh.getLastRow() === 0) sh.appendRow(conf.headers.concat(ID_HEADER));
-  return { sh, conf, idCol: idColumn_(sh, conf) };
+  const idCol = columnFor_(sh, conf, ID_HEADER);
+  const extraCols = {};
+  EXTRA_COLUMNS.forEach(([field, header]) => { extraCols[field] = columnFor_(sh, conf, header); });
+  return { sh, conf, idCol, extraCols };
 }
 
-// Columna (1-based) de los ids; la crea al final si no existe
-function idColumn_(sh, conf) {
+// Columna (1-based) con ese encabezado; la crea al final si no existe
+function columnFor_(sh, conf, name) {
   const lastCol = Math.max(sh.getLastColumn(), conf.headers.length);
   const header = sh.getRange(1, 1, 1, lastCol).getValues()[0];
-  const idx = header.findIndex(h => String(h).trim().toUpperCase() === ID_HEADER);
+  const idx = header.findIndex(h => String(h).trim().toUpperCase() === name.toUpperCase());
   if (idx >= 0) return idx + 1;
   const col = lastCol + 1;
-  sh.getRange(1, col).setValue(ID_HEADER);
+  sh.getRange(1, col).setValue(name);
   return col;
 }
 
@@ -120,10 +131,10 @@ function findRow_(sh, idCol, id) {
 // ---------- Acciones ----------
 
 function list_(type) {
-  const { sh, conf, idCol } = sheet_(type);
+  const { sh, conf, idCol, extraCols } = sheet_(type);
   const last = sh.getLastRow();
   if (last < 2) return [];
-  const width = Math.max(conf.fields.length, idCol);
+  const width = Math.max(conf.fields.length, idCol, ...Object.values(extraCols));
   const values = sh.getRange(2, 1, last - 1, width).getValues();
   const tz = Session.getScriptTimeZone();
   const out = [];
@@ -142,6 +153,12 @@ function list_(type) {
     rec.valor = toNumber_(rec.valor);
     rec.concepto = String(rec.concepto || '');
     rec.nota = String(rec.nota || '');
+    const moneda = String(row[extraCols.moneda - 1] || '').trim().toUpperCase();
+    if (moneda === 'CAD' || moneda === 'COP') rec.moneda = moneda;
+    if (moneda === 'CAD') {
+      rec.montoOriginal = toNumber_(row[extraCols.montoOriginal - 1]);
+      rec.tasa = toNumber_(row[extraCols.tasa - 1]);
+    }
     out.push(rec);
   });
   return out;
@@ -149,7 +166,7 @@ function list_(type) {
 
 function upsert_(body) {
   const type = body.type;
-  const { sh, conf, idCol } = sheet_(type);
+  const { sh, conf, idCol, extraCols } = sheet_(type);
   const id = String(body.id || ('gs_' + Utilities.getUuid()));
   const rec = fromPayload_(type, body);
   const values = conf.fields.map(f => rec[f]);
@@ -161,6 +178,13 @@ function upsert_(body) {
     row = sh.getLastRow() + 1;
     sh.getRange(row, 1, 1, values.length).setValues([values]);
     sh.getRange(row, idCol).setValue(id);
+  }
+  // Moneda original: solo si la app la envía (las versiones antiguas no lo hacen)
+  if (body.currency) {
+    const isCad = body.currency === 'CAD';
+    sh.getRange(row, extraCols.moneda).setValue(isCad ? 'CAD' : 'COP');
+    sh.getRange(row, extraCols.montoOriginal).setValue(isCad ? toNumber_(body.originalAmount) : '');
+    sh.getRange(row, extraCols.tasa).setValue(isCad ? toNumber_(body.rate) : '');
   }
   sh.getRange(row, 1).setNumberFormat('yyyy-mm-dd');
   return { ok: true, action: 'upsert', id: id, row: row };

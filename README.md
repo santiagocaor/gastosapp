@@ -1,6 +1,6 @@
 # 📱 GastosApp - Control de Gastos y Presupuestos
 
-Aplicación web *mobile-first* para finanzas personales: registra gastos e ingresos en pesos colombianos (COP), controla presupuestos mensuales por categoría y analiza en qué se va el dinero. Funciona sola en el navegador y, si quieres, se sincroniza con tu Google Sheet **BDGastosApp** a través de Google Apps Script.
+Aplicación web *mobile-first* para finanzas personales: registra gastos e ingresos en dólares canadienses (CAD) o pesos colombianos (COP), controla presupuestos mensuales por categoría y analiza en qué se va el dinero. Funciona sola en el navegador y, si quieres, se sincroniza con tu Google Sheet **BDGastosApp** a través de Google Apps Script.
 
 Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado como una SPA en JavaScript puro, sin dependencias ni paso de compilación.
 
@@ -16,8 +16,18 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
 - ➕ **Registrar**
   - Gastos por macro-categoría → subcategoría → concepto (Necesidades, Deseos, Deudas, Ahorros, Inversiones).
   - Ingresos por tipo → concepto.
+  - **Monto en CAD o COP** (CAD por defecto) con la equivalencia en la otra moneda.
   - **Fecha editable** (para registrar movimientos de días anteriores) y nota opcional.
-  - Atajo para convertir un monto de CAD a COP con la tasa del día.
+  - **Repetir cada mes**: convierte el movimiento en recurrente.
+- 🔁 **Movimientos recurrentes** (arriendo, nómina, suscripciones, cuota de la TC)
+  - 🔔 *Proponer*: cada mes aparece en Inicio para **Registrar**, revisarlo (✏️) u **Omitir**.
+  - ⚡ *Automático*: se registra solo el día indicado (si no abriste la app, se ponen al día los meses vencidos, hasta 12).
+  - Desde *Ajustes → Movimientos recurrentes* se cambia el monto, el modo, se pausa o se elimina.
+  - Cada mes genera un movimiento con id fijo (`rec_<plantilla>_<AAAA-MM>`), así nunca se duplica aunque uses varios dispositivos.
+- 💵 **Dos monedas**
+  - Los movimientos en CAD guardan el **monto original y la tasa del día**; `Valor` queda en COP para los totales y la hoja.
+  - El botón **CAD/COP** de la cabecera cambia la moneda en que se ven todos los montos. En CAD, lo registrado en CAD se suma exacto; lo registrado en COP se convierte con la tasa de hoy.
+  - Los presupuestos quedan fijos en la moneda en que los edites.
 - 📈 **Estadísticas**
   - Periodos: últimos 7 días, mes, año y todo el historial.
   - Comparación real con el periodo anterior equivalente, ingresos, ahorro neto y ritmo de gasto diario.
@@ -28,7 +38,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
 - 💰 **Presupuesto**
   - Límites mensuales editables en línea por macro-categoría, estado de cada uno y proyección de cierre de mes.
 - 🔔 **Alertas** de categorías cerca del tope o excedidas, gastos mayores que ingresos y registros sin sincronizar.
-- 💱 **Conversor COP ⇄ CAD** con tasa de mercado en vivo (open.er-api.com, con respaldo en exchangerate-api.com).
+- 💱 **Conversor COP ⇄ CAD** con tasa de mercado en vivo (es la tasa que usan los registros en CAD) (open.er-api.com, con respaldo en exchangerate-api.com).
 - 💾 **Datos**
   - Todo se guarda en el navegador (`localStorage`).
   - Respaldo e importación en JSON y exportación a CSV desde *Ajustes*.
@@ -52,7 +62,8 @@ Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del sc
 
 ### Cómo funciona
 
-- El script agrega una columna **ID** al final de cada pestaña (sin mover las demás) y asigna un id a las filas antiguas, así todo se puede editar y borrar.
+- El script agrega al final de cada pestaña las columnas **ID**, **Moneda**, **Monto original** y **Tasa CAD→COP** (sin mover las demás; se buscan por encabezado) y asigna un id a las filas antiguas, así todo se puede editar y borrar. **Valor** sigue en COP.
+- Si tu script es la v2, la app sigue funcionando y conserva la moneda en el dispositivo, pero avisa para actualizarlo a la v3 y guardarla también en la hoja.
 - La app envía `POST` con JSON en `text/plain` (sin preflight CORS), lee la respuesta y solo marca un cambio como enviado cuando el script confirma `ok`.
 - Sin conexión, los cambios quedan **pendientes** (☁️ tachado) y se envían solos al volver la red o al abrir la app; también con *Reenviar pendientes*.
 - La app se sincroniza sola al abrirse y al volver a ella (como máximo cada 2 minutos), o con *Sincronizar ahora*.

@@ -153,6 +153,12 @@
         </div>
 
         <div class="flex items-center gap-space-xs shrink-0">
+          <!-- Moneda en que se muestran los montos -->
+          <button data-action="toggle-display-currency" aria-label="Cambiar moneda de los montos" title="Ver montos en CAD o COP" class="h-8 px-2.5 rounded-full flex items-center gap-1 bg-surface-container-low text-on-surface hover:bg-surface-container text-label-md font-bold transition-colors" type="button">
+            <span class="material-symbols-outlined text-[16px] text-secondary">currency_exchange</span>
+            <span id="displayCurrencyLabel">CAD</span>
+          </button>
+
           <!-- Notificaciones -->
           <button aria-label="Notificaciones" data-action="open-modal" data-modal="notificationsModal" class="relative w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" type="button">
             <span class="material-symbols-outlined text-[22px]">notifications</span>
@@ -355,6 +361,19 @@
           <div id="dashCategoryChips" class="flex gap-space-sm overflow-x-auto pb-1 -mx-gutter px-gutter" style="-webkit-overflow-scrolling: touch;"></div>
         </div>
 
+        <!-- Recurrentes por confirmar -->
+        <div id="recurringCard" class="hidden rounded-xl bg-secondary-container/30 border border-secondary/20 p-3 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="text-label-lg font-bold text-on-surface flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[20px] text-secondary">event_repeat</span>
+              Recurrentes por confirmar
+              <span id="recurringCount" class="px-1.5 rounded-full bg-secondary text-on-secondary text-[11px]">0</span>
+            </h2>
+            <button type="button" data-action="open-recurring" class="text-label-md text-secondary font-semibold hover:underline">Administrar</button>
+          </div>
+          <div id="recurringProposals" class="space-y-1.5"></div>
+        </div>
+
         <!-- Movimientos del mes -->
         <div class="space-y-space-sm pb-space-sm">
           <div class="flex items-center justify-between gap-2">
@@ -404,17 +423,17 @@
 
           <div class="relative z-10 flex items-center gap-1.5 mb-1 flex-wrap justify-center">
             <label for="expenseAmountInput" class="text-on-primary-container font-label-md uppercase tracking-wider text-[11px]">Valor / Monto</label>
-            <span class="bg-surface-container-lowest/15 px-2 py-0.5 rounded-full text-primary-fixed text-[11px] font-bold">COP ($)</span>
-            <button type="button" onclick="quickConvertCadToCopPrompt()" class="bg-secondary-fixed/25 hover:bg-secondary-fixed/35 text-secondary-fixed text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors cursor-pointer" title="Convertir de Dólares Canadienses a COP">
-              <span class="material-symbols-outlined text-[13px]">currency_exchange</span>
-              De CAD a COP
-            </button>
+            <div id="amountCurrencySegment" class="flex items-center bg-primary/40 rounded-full p-0.5" role="group" aria-label="Moneda del monto">
+              <button type="button" data-action="set-form-currency" data-currency="CAD" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-colors">🇨🇦 CAD</button>
+              <button type="button" data-action="set-form-currency" data-currency="COP" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold transition-colors">🇨🇴 COP</button>
+            </div>
           </div>
 
           <div class="relative z-10 flex items-center justify-center gap-1 my-0.5">
-            <span class="text-primary-fixed text-2xl font-bold opacity-80">$</span>
+            <span id="amountCurrencyPrefix" class="text-primary-fixed text-2xl font-bold opacity-80">CA$</span>
             <input id="expenseAmountInput" type="number" inputmode="decimal" step="any" min="0" placeholder="0" class="w-52 bg-transparent text-center font-data-metric text-[32px] leading-none tracking-tight font-bold text-on-primary outline-none border-b border-primary-fixed/30 focus:border-primary-fixed placeholder:text-on-primary/40"/>
           </div>
+          <p id="amountEquivalent" class="relative z-10 text-primary-fixed text-[11px] font-medium mt-0.5"></p>
 
           <p class="relative z-10 text-on-primary-container text-[11px] flex items-center gap-1 mt-0.5">
             <span class="material-symbols-outlined text-[13px] text-secondary-fixed">cloud_sync</span>
@@ -476,6 +495,32 @@
           </div>
         </div>
 
+        <!-- Repetir cada mes -->
+        <div id="regRecurrenceBox" class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs border border-slate-100 space-y-2">
+          <label class="flex items-center justify-between gap-3 cursor-pointer">
+            <span class="flex items-center gap-1.5 text-label-md font-bold text-on-surface">
+              <span class="material-symbols-outlined text-[18px] text-secondary">event_repeat</span>
+              Repetir cada mes
+            </span>
+            <input id="regRecurrente" type="checkbox" class="w-5 h-5 accent-[#006c49] cursor-pointer"/>
+          </label>
+          <div id="regRecurrenteOptions" class="hidden space-y-2">
+            <p id="regRecurrenteDia" class="text-[12px] text-on-surface-variant"></p>
+            <label class="sr-only" for="regRecurrenteModo">Cómo registrar los próximos meses</label>
+            <select id="regRecurrenteModo" class="w-full h-10 px-3 rounded-lg bg-surface-container-low text-on-surface text-body-sm border border-slate-200 outline-none focus:ring-2 focus:ring-secondary">
+              <option value="proponer">🔔 Proponérmelo cada mes (yo lo confirmo)</option>
+              <option value="auto">⚡ Registrarlo automáticamente</option>
+            </select>
+          </div>
+        </div>
+        <div id="regRecurrenceLinked" class="hidden w-full rounded-xl px-3 py-2 bg-secondary-container/40 text-on-secondary-container flex items-center justify-between gap-2">
+          <span class="flex items-center gap-1.5 text-body-sm font-medium">
+            <span class="material-symbols-outlined text-[18px]">event_repeat</span>
+            <span id="regRecurrenceLinkedText">Movimiento recurrente.</span>
+          </span>
+          <button type="button" data-action="open-recurring" class="text-label-md font-semibold hover:underline shrink-0">Administrar</button>
+        </div>
+
         <!-- Primary Action CTA Button -->
         <div class="w-full pt-1 pb-4">
           <button id="saveExpenseBtn" class="w-full h-12 rounded-xl bg-primary text-on-primary font-label-lg font-bold flex items-center justify-center gap-2 shadow-md hover:bg-tertiary transition-transform active:scale-[0.98] cursor-pointer" type="button">
@@ -514,7 +559,7 @@
 
             <div class="flex items-baseline gap-1">
               <span id="statTotalExpense" class="text-display-lg-mobile font-display-lg-mobile text-on-primary font-bold tracking-tight">$0</span>
-              <span class="font-label-md text-on-primary-container">COP</span>
+              <span id="statCurrencyLabel" class="font-label-md text-on-primary-container">CAD</span>
             </div>
 
             <div class="flex flex-col gap-space-sm">
@@ -683,7 +728,7 @@
           <h2 class="text-headline-sm text-on-surface">Límites por categoría</h2>
           <button type="button" data-action="reset-budgets" class="text-label-md text-secondary font-semibold hover:underline">Restablecer</button>
         </div>
-        <p class="text-[11px] text-outline -mt-2">Edita el límite y se guarda al salir del campo. Los límites aplican a todos los meses.</p>
+        <p class="text-[11px] text-outline -mt-2">Edita el límite y se guarda al salir del campo. Los límites aplican a todos los meses. <span id="budgetCurrencyNote"></span></p>
 
         <div id="budgetList" class="space-y-space-sm pb-6"></div>
       </section>
@@ -773,6 +818,23 @@
       </div>
     </div>
 
+    <!-- Movimientos recurrentes -->
+    <div id="recurringModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="recurringTitle">
+      <div class="w-full max-w-sm max-h-[90vh] overflow-y-auto bg-surface-container-lowest rounded-2xl p-space-lg shadow-2xl space-y-space-md border border-slate-200">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2 text-secondary">
+            <span class="material-symbols-outlined text-[24px]">event_repeat</span>
+            <h3 id="recurringTitle" class="font-headline-sm text-on-surface">Movimientos recurrentes</h3>
+          </div>
+          <button data-action="close-modal" data-modal="recurringModal" aria-label="Cerrar" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant" type="button">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <p class="text-[12px] text-on-surface-variant">⚡ <b>Automático</b>: se registra solo el día indicado. 🔔 <b>Proponer</b>: aparece en Inicio para que lo confirmes, lo revises u omitas. Cambiar el monto aplica a los próximos meses.</p>
+        <div id="recurringList" class="space-y-2"></div>
+      </div>
+    </div>
+
     <!-- Ajustes y datos -->
     <div id="sheetsConfigModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <div class="w-full max-w-sm max-h-[90vh] overflow-y-auto bg-surface-container-lowest rounded-2xl p-space-lg shadow-2xl space-y-space-md border border-slate-200">
@@ -813,6 +875,14 @@
             Reenviar pendientes
           </button>
         </section>
+
+        <hr class="border-slate-200"/>
+
+        <!-- Recurrentes -->
+        <button type="button" data-action="open-recurring" class="w-full h-10 bg-surface-container text-on-surface hover:bg-surface-container-high rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5">
+          <span class="material-symbols-outlined text-[18px] text-secondary">event_repeat</span>
+          Movimientos recurrentes
+        </button>
 
         <hr class="border-slate-200"/>
 
