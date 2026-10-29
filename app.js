@@ -815,7 +815,12 @@ class AppState {
 
         // Script v6: catálogo de la hoja (BDGastos / BDIngresos)
         if (remote.catalog && (remote.catalog.gasto || remote.catalog.ingreso)) {
+          const prevCatalog = JSON.stringify(this.data.catalogoSheets && [this.data.catalogoSheets.gasto, this.data.catalogoSheets.ingreso]);
           this.data.catalogoSheets = { gasto: remote.catalog.gasto || null, ingreso: remote.catalog.ingreso || null, actualizado: Date.now() };
+          // El formulario de registro no se redibuja con renderAll(): se actualiza si cambió el catálogo
+          if (prevCatalog !== JSON.stringify([this.data.catalogoSheets.gasto, this.data.catalogoSheets.ingreso])) {
+            renderFormSelectors();
+          }
         }
 
         const deleted = new Set(this.data.pendingDeletes.map(d => `${d.type}:${d.id}`));
