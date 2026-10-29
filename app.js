@@ -1,125 +1,172 @@
-// GastosApp - Core Application Logic & State Store
+// GastosApp - Sincronizada con Google Sheets BDGastosApp
+// Spreadsheet ID: 1LCPp8qmQC0G-5-w6rTzA4aIG_PQkPs-BDLppPNJ4TbA
 
-const DEFAULT_STATE = {
-  currencyIndex: 0,
-  currencies: [
-    { code: 'USD ($)', sym: '$' },
-    { code: 'EUR (€)', sym: '€' },
-    { code: 'MXN ($)', sym: '$' }
-  ],
-  balanceHidden: false,
-  activeTab: 'inicio',
-  activePeriod: 'mes',
-  categories: {
-    alimentacion: {
-      id: 'alimentacion',
-      name: 'Alimentación',
-      icon: 'restaurant',
-      color: '#006c49',
-      budget: 600,
-      subcategories: ['Supermercado', 'Restaurantes', 'Cafetería / Snacks', 'Delivery', 'Bebidas']
-    },
-    transporte: {
-      id: 'transporte',
-      name: 'Transporte',
-      icon: 'directions_subway',
-      color: '#2b6954',
-      budget: 300,
-      subcategories: ['Combustible', 'Metro / Autobús', 'Taxi / Uber', 'Mantenimiento']
-    },
-    vivienda: {
-      id: 'vivienda',
-      name: 'Vivienda',
-      icon: 'home',
-      color: '#004f35',
-      budget: 800,
-      subcategories: ['Alquiler', 'Servicios (Luz/Agua)', 'Internet', 'Mantenimiento']
-    },
-    ocio: {
-      id: 'ocio',
-      name: 'Ocio',
-      icon: 'sports_esports',
-      color: '#4edea3',
-      budget: 250,
-      subcategories: ['Streaming', 'Cine', 'Juegos', 'Salidas']
-    },
-    salud: {
-      id: 'salud',
-      name: 'Salud',
-      icon: 'medical_services',
-      color: '#ba1a1a',
-      budget: 150,
-      subcategories: ['Medicamentos', 'Consultas', 'Gimnasio']
-    },
-    educacion: {
-      id: 'educacion',
-      name: 'Educación',
-      icon: 'school',
-      color: '#003623',
-      budget: 100,
-      subcategories: ['Cursos', 'Libros', 'Materiales']
+const SPREADSHEET_ID = "1LCPp8qmQC0G-5-w6rTzA4aIG_PQkPs-BDLppPNJ4TbA";
+
+// Base de Datos Estructurada de Gastos extraída directamente de tu Google Sheets (BDGastos)
+const BD_GASTOS = {
+  "Necesidades": {
+    icon: "health_and_safety",
+    color: "#006c49",
+    subcategorias: {
+      "Vivienda": ["Alquiler de vivienda", "Mantenimiento", "Seguro de hogar"],
+      "Alimentación": ["Supermercado"],
+      "Servicios": ["Energía", "Internet", "Plan de telefonía"],
+      "Transporte": ["Gasolina", "Tarjeta de transporte público", "Seguro vehicular", "Mantenimiento mecánico", "Cambio de aceite", "Parqueaderos recurrentes"],
+      "Salud": ["Póliza de salud", "Consultas con médicos", "Medicamentos recetados y botiquín familiar", "Tratamientos odontológicos y salud visual"],
+      "Educación": ["Matrícula y pensión escolar / universitaria", "Cursos online y certificaciones profesionales", "Libros, útiles escolares y material académico"],
+      "Impuestos y trámites": ["Impuesto DIAN", "Asesoría Contador Canadá", "Asesoría Contador Colombia", "Declaración de renta y asesoría tributaria contable"],
+      "Vestimenta": ["Ropa de trabajo, dotación y calzado esencial"]
     }
   },
-  transactions: [
+  "Deseos": {
+    icon: "celebration",
+    color: "#4edea3",
+    subcategorias: {
+      "Entretenimiento": ["Salidas a restaurantes, cafeterías y bares", "Suscripciones de streaming (Netflix, Spotify, etc.)"],
+      "Hobbies y ocio": ["Membresía de gimnasio / actividades deportivas"],
+      "Cuidado personal": ["Peluquería, barbería y tratamientos estéticos"],
+      "Vacaciones": ["Boletos aéreos, reservas hoteleras y tours turísticos"],
+      "Artículos de lujo": ["Perfumería exclusiva, gadgets no esenciales y accesorios"],
+      "Regalos y celebraciones": ["Obsequios de cumpleaños, aniversarios y fiestas decembrinas"]
+    }
+  },
+  "Deudas": {
+    icon: "credit_card",
+    color: "#ba1a1a",
+    subcategorias: {
+      "Préstamos bancarios": ["Cuota mensual de préstamo"],
+      "Tarjetas de crédito": ["Pago mensual de TC"],
+      "Deudas familiares": ["Cuota periódica pactada con familiares"]
+    }
+  },
+  "Ahorros": {
+    icon: "savings",
+    color: "#004f35",
+    subcategorias: {
+      "Fondo de emergencia": ["Aporte a cuenta de alto rendimiento para imprevistos"],
+      "Viaje Colombia": ["Aporte programado para tiquetes y viáticos a Colombia"]
+    }
+  },
+  "Inversiones": {
+    icon: "trending_up",
+    color: "#2b6954",
+    subcategorias: {
+      "Fondo de pensiones voluntarias": ["Aporte a fondo de pensión voluntaria con beneficio tributario"],
+      "Portafolio de inversión": ["Inversión periódica en ETFs indexados globales y acciones"],
+      "Vivienda": ["Aporte a fiducia / cuota inicial de inversión sobre planos"]
+    }
+  }
+};
+
+// Base de Datos Estructurada de Ingresos extraída directamente de tu Google Sheets (BDIngresos)
+const BD_INGRESOS = {
+  "Laboral": {
+    icon: "work",
+    conceptos: ["Nómina Santiago", "Nómina Lina"]
+  },
+  "Gubernamental": {
+    icon: "account_balance",
+    conceptos: ["Ayuda de gobierno"]
+  },
+  "Capacitación / Subsidio": {
+    icon: "school",
+    conceptos: ["Francisation"]
+  },
+  "Servicios Profesionales": {
+    icon: "support_agent",
+    conceptos: ["Asesorías"]
+  }
+};
+
+// Presupuestos mensuales sugeridos por Macro-categoría
+const PRESUPUESTOS_DEFAULT = {
+  "Necesidades": 3500000,
+  "Deseos": 800000,
+  "Deudas": 600000,
+  "Ahorros": 1000000,
+  "Inversiones": 1000000
+};
+
+// Estado Inicial con los registros reales existentes en tu Google Sheet
+const DEFAULT_STATE = {
+  currency: { code: 'COP ($)', sym: '$' },
+  balanceHidden: false,
+  activeTab: 'inicio',
+  googleScriptUrl: '', // URL del Webhook de Google Apps Script
+  presupuestos: { ...PRESUPUESTOS_DEFAULT },
+  
+  // Registros reales de la hoja "Registro de Gastos"
+  gastos: [
     {
-      id: 'tx_1',
-      type: 'gasto',
-      title: 'Supermercado El Trébol',
-      amount: 64.50,
-      categoryId: 'alimentacion',
-      subcategory: 'Supermercado',
-      date: new Date().toISOString(),
-      displayDate: 'Hoy, 14:30',
-      paymentMethod: 'Tarjeta Visa Débito',
-      icon: 'shopping_cart'
+      id: "tx_g1",
+      fecha: "2026-10-28",
+      valor: 1500000,
+      macroCategoria: "Necesidades",
+      subcategoria: "Vivienda",
+      concepto: "Alquiler de vivienda",
+      nota: "Pago mensual de arriendo",
+      displayDate: "28 Oct 2026"
     },
     {
-      id: 'tx_2',
-      type: 'gasto',
-      title: 'Gasolinera Repsol',
-      amount: 45.00,
-      categoryId: 'transporte',
-      subcategory: 'Combustible',
-      date: new Date(Date.now() - 86400000).toISOString(),
-      displayDate: 'Ayer',
-      paymentMethod: 'Tarjeta Visa Débito',
-      icon: 'local_gas_station'
+      id: "tx_g2",
+      fecha: "2026-10-28",
+      valor: 180000,
+      macroCategoria: "Necesidades",
+      subcategoria: "Alimentación",
+      concepto: "Supermercado",
+      nota: "Compras de víveres del mes",
+      displayDate: "28 Oct 2026"
     },
     {
-      id: 'tx_3',
-      type: 'gasto',
-      title: 'Suscripción Netflix',
-      amount: 15.99,
-      categoryId: 'ocio',
-      subcategory: 'Streaming',
-      date: new Date(Date.now() - 86400000 * 2).toISOString(),
-      displayDate: '28 Oct',
-      paymentMethod: 'Tarjeta Crédito',
-      icon: 'smart_display'
+      id: "tx_g3",
+      fecha: "2026-10-29",
+      valor: 55000,
+      macroCategoria: "Deseos",
+      subcategoria: "Entretenimiento",
+      concepto: "Salidas a restaurantes, cafeterías y bares",
+      nota: "Cena familiar fin de semana",
+      displayDate: "29 Oct 2026"
+    }
+  ],
+
+  // Registros reales de la hoja "Registro de Ingresos"
+  ingresos: [
+    {
+      id: "tx_i1",
+      fecha: "2026-10-28",
+      valor: 3500000,
+      tipoIngreso: "Laboral",
+      concepto: "Nómina Santiago",
+      nota: "Salario mensual",
+      displayDate: "28 Oct 2026"
     },
     {
-      id: 'tx_4',
-      type: 'ingreso',
-      title: 'Nómina Empresa Tech',
-      amount: 1900.00,
-      categoryId: 'educacion',
-      subcategory: 'Salario',
-      date: new Date(Date.now() - 86400000 * 3).toISOString(),
-      displayDate: '27 Oct',
-      paymentMethod: 'Transferencia',
-      icon: 'work'
+      id: "tx_i2",
+      fecha: "2026-10-28",
+      valor: 2800000,
+      tipoIngreso: "Laboral",
+      concepto: "Nómina Lina",
+      nota: "Salario quincenal",
+      displayDate: "28 Oct 2026"
     },
     {
-      id: 'tx_5',
-      type: 'gasto',
-      title: 'Farmacia San José',
-      amount: 22.80,
-      categoryId: 'salud',
-      subcategory: 'Medicamentos',
-      date: new Date(Date.now() - 86400000 * 4).toISOString(),
-      displayDate: '26 Oct',
-      paymentMethod: 'Efectivo',
-      icon: 'medical_services'
+      id: "tx_i3",
+      fecha: "2026-10-29",
+      valor: 450000,
+      tipoIngreso: "Gubernamental",
+      concepto: "Ayuda de gobierno",
+      nota: "Subsidio familiar",
+      displayDate: "29 Oct 2026"
+    },
+    {
+      id: "tx_i4",
+      fecha: "2026-10-30",
+      valor: 200000,
+      tipoIngreso: "Capacitación / Subsidio",
+      concepto: "Francisation",
+      nota: "Asignación por estudio",
+      displayDate: "30 Oct 2026"
     }
   ]
 };
@@ -131,150 +178,161 @@ class AppState {
 
   load() {
     try {
-      const saved = localStorage.getItem('gastosapp_data');
+      const saved = localStorage.getItem('gastosapp_sheets_state');
       if (saved) {
         this.data = JSON.parse(saved);
-        // ensure default structure
-        this.data.categories = { ...DEFAULT_STATE.categories, ...(this.data.categories || {}) };
-        if (!this.data.transactions || this.data.transactions.length === 0) {
-          this.data.transactions = [...DEFAULT_STATE.transactions];
+        if (!this.data.gastos || this.data.gastos.length === 0) {
+          this.data.gastos = [...DEFAULT_STATE.gastos];
+        }
+        if (!this.data.ingresos || this.data.ingresos.length === 0) {
+          this.data.ingresos = [...DEFAULT_STATE.ingresos];
+        }
+        if (!this.data.presupuestos) {
+          this.data.presupuestos = { ...PRESUPUESTOS_DEFAULT };
         }
       } else {
         this.data = JSON.parse(JSON.stringify(DEFAULT_STATE));
         this.save();
       }
     } catch (e) {
-      console.error('Error loading state from localStorage:', e);
+      console.error('Error loading state:', e);
       this.data = JSON.parse(JSON.stringify(DEFAULT_STATE));
     }
   }
 
   save() {
     try {
-      localStorage.setItem('gastosapp_data', JSON.stringify(this.data));
+      localStorage.setItem('gastosapp_sheets_state', JSON.stringify(this.data));
     } catch (e) {
       console.error('Error saving state:', e);
     }
   }
 
-  get currency() {
-    return this.data.currencies[this.data.currencyIndex || 0];
-  }
-
-  cycleCurrency() {
-    this.data.currencyIndex = (this.data.currencyIndex + 1) % this.data.currencies.length;
-    this.save();
-    return this.currency;
-  }
-
   formatMoney(amount) {
-    const sym = this.currency.sym;
-    return `${sym}${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const sym = this.data.currency ? this.data.currency.sym : '$';
+    return `${sym}${Number(amount || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   }
 
-  getTotalBalance() {
-    let income = 1900.00; // baseline starting funds + records
-    let expense = 0;
-    this.data.transactions.forEach(tx => {
-      if (tx.type === 'ingreso') income += Number(tx.amount);
-      else if (tx.type === 'gasto') expense += Number(tx.amount);
-    });
-    return income - expense;
+  getTotalIngresos() {
+    return this.data.ingresos.reduce((sum, item) => sum + Number(item.valor || 0), 0);
   }
 
-  getMonthlyTotals() {
-    let income = 3800.00; // base monthly income
-    let expense = 0;
-    this.data.transactions.forEach(tx => {
-      if (tx.type === 'gasto') {
-        expense += Number(tx.amount);
-      } else if (tx.type === 'ingreso') {
-        income += Number(tx.amount);
-      }
-    });
-    return { income, expense };
+  getTotalGastos() {
+    return this.data.gastos.reduce((sum, item) => sum + Number(item.valor || 0), 0);
   }
 
-  getCategoryTotals() {
+  getBalanceTotal() {
+    return this.getTotalIngresos() - this.getTotalGastos();
+  }
+
+  getGastosPorMacroCategoria() {
     const totals = {};
-    Object.keys(this.data.categories).forEach(catId => {
-      totals[catId] = 0;
+    Object.keys(BD_GASTOS).forEach(macro => {
+      totals[macro] = 0;
     });
-    this.data.transactions.forEach(tx => {
-      if (tx.type === 'gasto' && totals[tx.categoryId] !== undefined) {
-        totals[tx.categoryId] += Number(tx.amount);
+    this.data.gastos.forEach(g => {
+      if (totals[g.macroCategoria] !== undefined) {
+        totals[g.macroCategoria] += Number(g.valor || 0);
       }
     });
     return totals;
   }
 
   getGlobalBudget() {
-    return Object.values(this.data.categories).reduce((acc, c) => acc + (c.budget || 0), 0);
+    return Object.values(this.data.presupuestos).reduce((a, b) => a + Number(b || 0), 0);
   }
 
-  addTransaction(tx) {
-    tx.id = 'tx_' + Date.now();
-    tx.date = new Date().toISOString();
-    tx.displayDate = 'Hoy, ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    this.data.transactions.unshift(tx);
+  async addGasto(gasto) {
+    gasto.id = "tx_g_" + Date.now();
+    gasto.fecha = new Date().toISOString().split('T')[0];
+    gasto.displayDate = "Hoy, " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    this.data.gastos.unshift(gasto);
     this.save();
-  }
 
-  deleteTransaction(id) {
-    this.data.transactions = this.data.transactions.filter(t => t.id !== id);
-    this.save();
-  }
-
-  updateCategoryBudget(catId, newBudget) {
-    if (this.data.categories[catId]) {
-      this.data.categories[catId].budget = Number(newBudget);
-      this.save();
+    // Sincronizar con Google Sheets si la URL está configurada
+    if (this.data.googleScriptUrl) {
+      this.syncToGoogleSheets({
+        type: "gasto",
+        id: gasto.id,
+        date: gasto.fecha,
+        macroCategory: gasto.macroCategoria,
+        subcategory: gasto.subcategoria,
+        concept: gasto.concepto,
+        amount: gasto.valor,
+        paymentMethod: gasto.nota || ""
+      });
     }
   }
 
-  addCategory(name, icon, budget) {
-    const id = name.toLowerCase().replace(/\s+/g, '_');
-    this.data.categories[id] = {
-      id,
-      name,
-      icon: icon || 'category',
-      color: '#006c49',
-      budget: Number(budget) || 200,
-      subcategories: ['General']
-    };
+  async addIngreso(ingreso) {
+    ingreso.id = "tx_i_" + Date.now();
+    ingreso.fecha = new Date().toISOString().split('T')[0];
+    ingreso.displayDate = "Hoy, " + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    this.data.ingresos.unshift(ingreso);
     this.save();
+
+    // Sincronizar con Google Sheets si la URL está configurada
+    if (this.data.googleScriptUrl) {
+      this.syncToGoogleSheets({
+        type: "ingreso",
+        id: ingreso.id,
+        date: ingreso.fecha,
+        incomeType: ingreso.tipoIngreso,
+        concept: ingreso.concepto,
+        amount: ingreso.valor,
+        paymentMethod: ingreso.nota || ""
+      });
+    }
+  }
+
+  deleteGasto(id) {
+    this.data.gastos = this.data.gastos.filter(g => g.id !== id);
+    this.save();
+  }
+
+  deleteIngreso(id) {
+    this.data.ingresos = this.data.ingresos.filter(i => i.id !== id);
+    this.save();
+  }
+
+  async syncToGoogleSheets(payload) {
+    try {
+      await fetch(this.data.googleScriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      console.log("Sincronizado con Google Sheets con éxito");
+    } catch (err) {
+      console.error("Error al sincronizar con Google Sheets:", err);
+    }
   }
 }
 
 const state = new AppState();
 
-// UI Render & Controller
+// Inicializador de Interfaz
 document.addEventListener('DOMContentLoaded', () => {
   initNavigation();
-  initRegistrationForm();
+  initFormSelectors();
   initPrivacyToggle();
-  initCurrencyToggle();
-  initCategorySearch();
-  initNotificationsModal();
+  initSheetsConfigModal();
   renderAll();
 });
 
-// View Navigation
+// Navegación
 function initNavigation() {
-  const navLinks = document.querySelectorAll('nav a[data-path]');
-  navLinks.forEach(link => {
+  document.querySelectorAll('nav a[data-path]').forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
-      const path = link.getAttribute('data-path');
-      switchView(path);
+      switchView(link.getAttribute('data-path'));
     });
   });
 
-  // Action buttons from dashboard
   document.querySelectorAll('[data-goto]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const target = btn.getAttribute('data-goto');
-      switchView(target);
+      switchView(btn.getAttribute('data-goto'));
     });
   });
 }
@@ -283,18 +341,10 @@ function switchView(viewName) {
   state.data.activeTab = viewName;
   state.save();
 
+  document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById(`view-${viewName}`);
+  if (panel) panel.classList.add('active');
 
-  // Hide all view panels
-  document.querySelectorAll('.view-panel').forEach(panel => {
-    panel.classList.remove('active');
-  });
-
-  const activePanel = document.getElementById(`view-${viewName}`);
-  if (activePanel) {
-    activePanel.classList.add('active');
-  }
-
-  // Update nav bar active state
   document.querySelectorAll('nav a[data-path]').forEach(link => {
     const isCurrent = link.getAttribute('data-path') === viewName;
     if (isCurrent) {
@@ -308,26 +358,19 @@ function switchView(viewName) {
     }
   });
 
-  // Update header title
-  const headerTitle = document.getElementById('headerTitle');
-  const headerBackBtn = document.getElementById('headerBackBtn');
-  if (headerTitle) {
-    const titles = {
-      inicio: 'Inicio',
-      estadisticas: 'Estadísticas',
-      registrar: 'Registrar',
-      categorias: 'Categorías',
-      presupuestos: 'Presupuestos'
-    };
-    headerTitle.textContent = titles[viewName] || 'GastosApp';
-  }
-
-  if (headerBackBtn) {
-    if (viewName === 'registrar') {
-      headerBackBtn.classList.remove('hidden');
-    } else {
-      headerBackBtn.classList.add('hidden');
-    }
+  const titleEl = document.getElementById('headerTitle');
+  const backBtn = document.getElementById('headerBackBtn');
+  const titles = {
+    inicio: 'Inicio',
+    estadisticas: 'Estadísticas',
+    registrar: 'Registrar',
+    categorias: 'Categorías',
+    presupuestos: 'Presupuestos'
+  };
+  if (titleEl) titleEl.textContent = titles[viewName] || 'GastosApp';
+  if (backBtn) {
+    if (viewName === 'registrar') backBtn.classList.remove('hidden');
+    else backBtn.classList.add('hidden');
   }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -335,99 +378,83 @@ function switchView(viewName) {
 }
 window.switchView = switchView;
 
-
 function initPrivacyToggle() {
-  const toggleBtn = document.getElementById('balanceToggleBtn');
-  const balanceTxt = document.getElementById('balanceAmount');
-  const eyeIcon = document.getElementById('eyeIcon');
-
-  if (toggleBtn) {
-    toggleBtn.addEventListener('click', () => {
+  const btn = document.getElementById('balanceToggleBtn');
+  if (btn) {
+    btn.addEventListener('click', () => {
       state.data.balanceHidden = !state.data.balanceHidden;
       state.save();
-      updateBalanceDisplay();
+      updateBalance();
     });
   }
 }
 
-function updateBalanceDisplay() {
-  const balanceTxt = document.getElementById('balanceAmount');
-  const eyeIcon = document.getElementById('eyeIcon');
-  if (!balanceTxt) return;
+function updateBalance() {
+  const balEl = document.getElementById('balanceAmount');
+  const eye = document.getElementById('eyeIcon');
+  if (!balEl) return;
 
-  const total = state.getTotalBalance();
+  const total = state.getBalanceTotal();
   if (state.data.balanceHidden) {
-    balanceTxt.textContent = '••••••••';
-    if (eyeIcon) eyeIcon.textContent = 'visibility_off';
+    balEl.textContent = '••••••••';
+    if (eye) eye.textContent = 'visibility_off';
   } else {
-    balanceTxt.textContent = state.formatMoney(total);
-    if (eyeIcon) eyeIcon.textContent = 'visibility';
-  }
-}
-
-function initCurrencyToggle() {
-  const currencyBtn = document.getElementById('currencyBtn');
-  if (currencyBtn) {
-    currencyBtn.addEventListener('click', () => {
-      const cur = state.cycleCurrency();
-      document.querySelectorAll('.activeCurrencyText').forEach(el => el.textContent = cur.code);
-      document.querySelectorAll('.currencySymbolText').forEach(el => el.textContent = cur.sym);
-      renderAll();
-      showToast(`Moneda cambiada a ${cur.code}`);
-    });
+    balEl.textContent = state.formatMoney(total);
+    if (eye) eye.textContent = 'visibility';
   }
 }
 
 // Render Master
 function renderAll() {
-  updateBalanceDisplay();
+  updateBalance();
   renderDashboard();
-  renderTransactions();
-  renderCategories();
-  renderStatistics();
+  renderMovementsList();
+  renderCategoriesView();
+  renderStatisticsView();
 }
 
 function renderDashboard() {
-  const { income, expense } = state.getMonthlyTotals();
-  const globalBudget = state.getGlobalBudget();
-  const budgetPercent = globalBudget > 0 ? Math.min(Math.round((expense / globalBudget) * 100), 100) : 0;
-  const remaining = Math.max(0, globalBudget - expense);
+  const totalIngresos = state.getTotalIngresos();
+  const totalGastos = state.getTotalGastos();
+  const budgetGlobal = state.getGlobalBudget();
+  const pct = budgetGlobal > 0 ? Math.min(Math.round((totalGastos / budgetGlobal) * 100), 100) : 0;
+  const rem = Math.max(0, budgetGlobal - totalGastos);
 
-  // Income & Expense cards
-  const incomeEl = document.getElementById('dashIncome');
-  const expenseEl = document.getElementById('dashExpense');
-  if (incomeEl) incomeEl.textContent = `+${state.formatMoney(income)}`;
-  if (expenseEl) expenseEl.textContent = `-${state.formatMoney(expense)}`;
+  const incEl = document.getElementById('dashIncome');
+  const expEl = document.getElementById('dashExpense');
+  if (incEl) incEl.textContent = `+${state.formatMoney(totalIngresos)}`;
+  if (expEl) expEl.textContent = `-${state.formatMoney(totalGastos)}`;
 
-  // Budget progress
-  const budgetProgressText = document.getElementById('budgetProgressText');
-  const budgetRatioText = document.getElementById('budgetRatioText');
-  const budgetBar = document.getElementById('budgetBar');
-  const budgetRemainingText = document.getElementById('budgetRemainingText');
+  const bProg = document.getElementById('budgetProgressText');
+  const bRatio = document.getElementById('budgetRatioText');
+  const bBar = document.getElementById('budgetBar');
+  const bRem = document.getElementById('budgetRemainingText');
 
-  if (budgetProgressText) budgetProgressText.textContent = `Presupuesto Global (${budgetPercent}% gastado)`;
-  if (budgetRatioText) budgetRatioText.textContent = `${state.formatMoney(expense)} / ${state.formatMoney(globalBudget)}`;
-  if (budgetBar) budgetBar.style.width = `${budgetPercent}%`;
-  if (budgetRemainingText) budgetRemainingText.textContent = `Quedan ${state.formatMoney(remaining)} para el mes`;
+  if (bProg) bProg.textContent = `Presupuesto Global (${pct}% gastado)`;
+  if (bRatio) bRatio.textContent = `${state.formatMoney(totalGastos)} / ${state.formatMoney(budgetGlobal)}`;
+  if (bBar) bBar.style.width = `${pct}%`;
+  if (bRem) bRem.textContent = `Quedan ${state.formatMoney(rem)} este mes`;
 
-  // Render Horizontal Category Chips on Dashboard
-  const chipsContainer = document.getElementById('dashCategoryChips');
-  if (chipsContainer) {
-    const catTotals = state.getCategoryTotals();
-    const totalSpent = Object.values(catTotals).reduce((a, b) => a + b, 0) || 1;
+  // Horizontal Macro-Category Chips
+  const chips = document.getElementById('dashCategoryChips');
+  if (chips) {
+    const macroTotals = state.getGastosPorMacroCategoria();
+    const totalSpent = totalGastos || 1;
 
-    chipsContainer.innerHTML = Object.values(state.data.categories).map(cat => {
-      const spent = catTotals[cat.id] || 0;
-      const pct = Math.round((spent / totalSpent) * 100);
+    chips.innerHTML = Object.keys(BD_GASTOS).map(macro => {
+      const spent = macroTotals[macro] || 0;
+      const percent = Math.round((spent / totalSpent) * 100);
+      const conf = BD_GASTOS[macro];
+
       return `
-        <div class="flex items-center gap-2.5 p-2.5 pr-3.5 bg-surface-container-lowest rounded-xl shadow-sm shrink-0 min-w-[150px] cursor-pointer hover:bg-surface-container-low transition-all active:scale-95" onclick="switchView('categorias')">
-          <div class="w-9 h-9 rounded-lg bg-secondary-container/50 flex items-center justify-center text-secondary shrink-0">
-            <span class="material-symbols-outlined text-[20px]">${cat.icon}</span>
+        <div class="flex items-center gap-2.5 p-2.5 pr-3.5 bg-surface-container-lowest rounded-xl shadow-xs shrink-0 min-w-[155px] cursor-pointer hover:bg-surface-container-low transition-all active:scale-95" onclick="switchView('categorias')">
+          <div class="w-9 h-9 rounded-lg bg-secondary-container/40 flex items-center justify-center text-secondary shrink-0">
+            <span class="material-symbols-outlined text-[20px]">${conf.icon}</span>
           </div>
           <div class="flex flex-col min-w-0">
-            <span class="text-body-sm font-semibold text-on-surface truncate">${cat.name}</span>
+            <span class="text-body-sm font-semibold text-on-surface truncate">${macro}</span>
             <div class="flex items-center gap-1.5">
-              <span class="text-label-md text-secondary font-bold">${pct}%</span>
+              <span class="text-label-md text-secondary font-bold">${percent}%</span>
               <span class="text-body-sm text-on-surface-variant truncate">${state.formatMoney(spent)}</span>
             </div>
           </div>
@@ -437,45 +464,48 @@ function renderDashboard() {
   }
 }
 
-function renderTransactions() {
+function renderMovementsList() {
   const container = document.getElementById('recentTransactionsList');
   if (!container) return;
 
-  if (state.data.transactions.length === 0) {
+  // Unificar y ordenar movimientos (gastos + ingresos)
+  const all = [
+    ...state.data.gastos.map(g => ({ ...g, type: 'gasto' })),
+    ...state.data.ingresos.map(i => ({ ...i, type: 'ingreso' }))
+  ].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+  if (all.length === 0) {
     container.innerHTML = `
-      <div class="p-6 text-center text-on-surface-variant bg-surface-container-lowest rounded-xl shadow-sm">
-        <span class="material-symbols-outlined text-4xl text-outline-variant mb-2">receipt_long</span>
-        <p class="text-body-md font-medium">No hay movimientos registrados aún.</p>
-        <button class="mt-3 px-4 py-1.5 bg-secondary text-on-secondary rounded-lg text-label-md font-semibold" onclick="switchView('registrar')">
-          Registrar primer gasto
-        </button>
+      <div class="p-6 text-center text-on-surface-variant bg-surface-container-lowest rounded-xl">
+        <p class="text-body-md">No hay movimientos registrados.</p>
       </div>
     `;
     return;
   }
 
-  container.innerHTML = state.data.transactions.slice(0, 10).map(tx => {
-    const isExpense = tx.type === 'gasto';
-    const sign = isExpense ? '-' : '+';
-    const amountColor = isExpense ? 'text-on-surface' : 'text-secondary font-semibold';
-    const cat = state.data.categories[tx.categoryId] || { name: 'Varios', icon: 'payments' };
+  container.innerHTML = all.slice(0, 15).map(m => {
+    const isGasto = m.type === 'gasto';
+    const sign = isGasto ? '-' : '+';
+    const color = isGasto ? 'text-on-surface font-semibold' : 'text-secondary font-bold';
+    const icon = isGasto ? (BD_GASTOS[m.macroCategoria]?.icon || 'trending_down') : (BD_INGRESOS[m.tipoIngreso]?.icon || 'trending_up');
+    const title = m.concepto || (isGasto ? m.subcategoria : m.tipoIngreso);
+    const subtitle = isGasto ? `${m.macroCategoria} › ${m.subcategoria}` : `Ingreso › ${m.tipoIngreso}`;
 
     return `
-      <div class="p-3 bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between transition-colors active:bg-surface-container-low group">
+      <div class="p-3 bg-surface-container-lowest rounded-xl shadow-xs flex items-center justify-between transition-colors active:bg-surface-container-low group">
         <div class="flex items-center gap-3 min-w-0">
-          <div class="relative w-10 h-10 rounded-full ${isExpense ? 'bg-secondary-container/40 text-secondary' : 'bg-secondary text-on-secondary'} flex items-center justify-center shrink-0">
-            <span class="material-symbols-outlined text-[20px]">${tx.icon || cat.icon || 'receipt'}</span>
+          <div class="w-10 h-10 rounded-full ${isGasto ? 'bg-secondary-container/40 text-secondary' : 'bg-secondary text-on-secondary'} flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[20px]">${icon}</span>
           </div>
           <div class="flex flex-col min-w-0">
-            <span class="text-body-md font-semibold text-on-surface truncate">${tx.title || cat.name}</span>
-            <span class="text-body-sm text-on-surface-variant truncate">${cat.name} › ${tx.subcategory || 'General'} • ${tx.displayDate}</span>
+            <span class="text-body-md font-semibold text-on-surface truncate">${title}</span>
+            <span class="text-body-sm text-on-surface-variant truncate">${subtitle} • ${m.displayDate || m.fecha}</span>
+            ${m.nota ? `<span class="text-[11px] text-outline truncate italic">${m.nota}</span>` : ''}
           </div>
         </div>
         <div class="flex items-center gap-2 shrink-0 pl-2">
-          <div class="text-right">
-            <span class="text-data-metric ${amountColor}">${sign}${state.formatMoney(tx.amount)}</span>
-          </div>
-          <button aria-label="Eliminar transacción" class="opacity-0 group-hover:opacity-100 p-1 text-on-surface-variant hover:text-error transition-opacity" onclick="deleteTx('${tx.id}')">
+          <span class="text-data-metric ${color}">${sign}${state.formatMoney(m.valor)}</span>
+          <button aria-label="Eliminar" class="opacity-0 group-hover:opacity-100 p-1 text-on-surface-variant hover:text-error transition-opacity" onclick="deleteItem('${m.type}', '${m.id}')">
             <span class="material-symbols-outlined text-[18px]">delete</span>
           </button>
         </div>
@@ -484,73 +514,49 @@ function renderTransactions() {
   }).join('');
 }
 
-window.deleteTx = function(id) {
-  if (confirm('¿Eliminar este movimiento?')) {
-    state.deleteTransaction(id);
+window.deleteItem = function(type, id) {
+  if (confirm('¿Deseas eliminar este registro?')) {
+    if (type === 'gasto') state.deleteGasto(id);
+    else state.deleteIngreso(id);
     renderAll();
-    showToast('Movimiento eliminado');
+    showToast('Registro eliminado');
   }
 };
 
-// Categories & Budgets Page
-function renderCategories(filter = 'all', query = '') {
+// Categorías y Presupuestos
+function renderCategoriesView() {
   const container = document.getElementById('categoryFeed');
   if (!container) return;
 
-  const catTotals = state.getCategoryTotals();
-  const search = (query || '').toLowerCase().trim();
+  const macroTotals = state.getGastosPorMacroCategoria();
 
-  let categories = Object.values(state.data.categories);
-
-  // Apply filters
-  if (filter === 'active') {
-    categories = categories.filter(c => (c.budget || 0) > 0);
-  } else if (filter === 'unlimited') {
-    categories = categories.filter(c => !c.budget || c.budget === 0);
-  }
-
-  // Apply search
-  if (search) {
-    categories = categories.filter(c => 
-      c.name.toLowerCase().includes(search) || 
-      c.subcategories.some(s => s.toLowerCase().includes(search))
-    );
-  }
-
-  if (categories.length === 0) {
-    container.innerHTML = `
-      <div class="p-8 text-center text-on-surface-variant bg-surface-container-lowest rounded-xl">
-        <p class="text-body-md">No se encontraron categorías.</p>
-      </div>
-    `;
-    return;
-  }
-
-  container.innerHTML = categories.map(cat => {
-    const spent = catTotals[cat.id] || 0;
-    const limit = cat.budget || 0;
-    const percent = limit > 0 ? Math.min(Math.round((spent / limit) * 100), 100) : 0;
-    const isWarning = percent >= 85;
-    const remaining = Math.max(0, limit - spent);
+  container.innerHTML = Object.keys(BD_GASTOS).map(macro => {
+    const conf = BD_GASTOS[macro];
+    const spent = macroTotals[macro] || 0;
+    const limit = state.data.presupuestos[macro] || 0;
+    const pct = limit > 0 ? Math.min(Math.round((spent / limit) * 100), 100) : 0;
+    const isWarning = pct >= 85;
+    const rem = Math.max(0, limit - spent);
+    const subcats = Object.keys(conf.subcategorias);
 
     return `
-      <div class="category-card bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden transition-all duration-300">
+      <div class="category-card bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden transition-all duration-300">
         <div class="p-space-md">
           <div class="flex items-start justify-between gap-space-sm">
             <div class="flex items-center gap-space-sm min-w-0">
               <div class="w-12 h-12 rounded-xl bg-secondary-container/30 flex items-center justify-center shrink-0 text-secondary">
-                <span class="material-symbols-outlined text-[26px]">${cat.icon}</span>
+                <span class="material-symbols-outlined text-[26px]">${conf.icon}</span>
               </div>
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
-                  <h2 class="text-headline-sm font-headline-sm text-on-surface truncate">${cat.name}</h2>
+                  <h2 class="text-headline-sm font-headline-sm text-on-surface truncate">${macro}</h2>
                   ${limit > 0 ? `
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-label-md font-semibold ${isWarning ? 'bg-error-container text-on-error-container' : 'bg-secondary-container text-on-secondary-container'}">
-                      ${percent}%
+                      ${pct}%
                     </span>
                   ` : ''}
                 </div>
-                <p class="text-body-sm text-on-surface-variant">${cat.subcategories.length} subcategorías activas</p>
+                <p class="text-body-sm text-on-surface-variant">${subcats.length} subcategorías registradas</p>
               </div>
             </div>
             <div class="flex flex-col items-end shrink-0">
@@ -562,44 +568,42 @@ function renderCategories(filter = 'all', query = '') {
           ${isWarning && limit > 0 ? `
             <div class="mt-space-sm flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container-high text-on-surface">
               <span class="material-symbols-outlined text-[17px] text-error">warning</span>
-              <span class="text-body-sm font-medium">¡Casi al tope! Te quedan ${state.formatMoney(remaining)}</span>
+              <span class="text-body-sm font-medium">¡Casi al tope! Te quedan ${state.formatMoney(rem)}</span>
             </div>
           ` : ''}
 
-          <!-- Progress Bar -->
           <div class="mt-space-sm space-y-1">
             <div class="w-full h-2 rounded-full bg-surface-container-high overflow-hidden">
-              <div class="h-full ${isWarning ? 'bg-error' : 'bg-secondary'} rounded-full transition-all duration-500" style="width: ${percent}%;"></div>
+              <div class="h-full ${isWarning ? 'bg-error' : 'bg-secondary'} rounded-full transition-all duration-500" style="width: ${pct}%;"></div>
             </div>
           </div>
 
-          <!-- Accordion toggle -->
-          <button class="accordion-toggle w-full mt-3 pt-2 flex items-center justify-between text-body-sm text-secondary font-semibold hover:underline" onclick="toggleAccordion('${cat.id}')">
+          <button class="w-full mt-3 pt-2 flex items-center justify-between text-body-sm text-secondary font-semibold hover:underline" onclick="toggleAcc('${macro}')">
             <span class="flex items-center gap-1">
               <span class="material-symbols-outlined text-[18px]">account_tree</span>
-              Detalle por subcategoría
+              Ver subcategorías y conceptos de gasto
             </span>
-            <span class="material-symbols-outlined text-[20px] transition-transform duration-200" id="icon-acc-${cat.id}">expand_more</span>
+            <span class="material-symbols-outlined text-[20px] transition-transform duration-200" id="icon-acc-${macro}">expand_more</span>
           </button>
         </div>
 
-        <!-- Subcategories Drawer -->
-        <div class="accordion-content hidden bg-surface-container-low px-space-md pb-space-md pt-space-xs space-y-2" id="acc-${cat.id}">
-          ${cat.subcategories.map(sub => `
-            <div class="flex items-center justify-between p-2.5 bg-surface-container-lowest rounded-lg shadow-xs">
-              <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-outline text-[18px]">subdirectory_arrow_right</span>
-                <span class="text-body-sm text-on-surface font-medium">${sub}</span>
+        <div class="hidden bg-surface-container-low px-space-md pb-space-md pt-space-xs space-y-2.5" id="acc-${macro}">
+          ${subcats.map(sub => `
+            <div class="p-2.5 bg-surface-container-lowest rounded-lg shadow-xs">
+              <div class="flex items-center justify-between">
+                <span class="text-body-md font-semibold text-on-surface">${sub}</span>
+                <span class="text-[11px] px-2 py-0.5 rounded bg-surface-container-high text-primary font-medium">${conf.subcategorias[sub].length} conceptos</span>
               </div>
-              <span class="text-label-md text-on-surface-variant font-medium">Activa</span>
+              <div class="flex flex-wrap gap-1.5 mt-1.5">
+                ${conf.subcategorias[sub].map(c => `
+                  <span class="text-body-sm px-2 py-0.5 rounded bg-surface-container text-on-surface-variant">${c}</span>
+                `).join('')}
+              </div>
             </div>
           `).join('')}
-          <div class="pt-1 flex gap-2">
-            <button class="px-3 py-1.5 bg-surface-container-lowest text-secondary rounded-lg text-label-md font-semibold flex items-center gap-1 shadow-xs hover:bg-surface-container transition-colors" onclick="promptAddSubcat('${cat.id}')">
-              <span class="material-symbols-outlined text-[16px]">add</span> Añadir Subcategoría
-            </button>
-            <button class="px-3 py-1.5 bg-surface-container-lowest text-on-surface-variant rounded-lg text-label-md font-medium hover:text-on-surface transition-colors" onclick="promptEditBudget('${cat.id}', ${cat.budget})">
-              Editar Límite
+          <div class="pt-1">
+            <button class="px-3 py-1.5 bg-surface-container-lowest text-secondary rounded-lg text-label-md font-semibold shadow-xs hover:bg-surface-container" onclick="editBudgetMacro('${macro}', ${limit})">
+              Editar Presupuesto de ${macro}
             </button>
           </div>
         </div>
@@ -608,165 +612,84 @@ function renderCategories(filter = 'all', query = '') {
   }).join('');
 }
 
-window.toggleAccordion = function(catId) {
-  const el = document.getElementById(`acc-${catId}`);
-  const icon = document.getElementById(`icon-acc-${catId}`);
-  if (!el) return;
-
-  const isHidden = el.classList.contains('hidden');
-  if (isHidden) {
-    el.classList.remove('hidden');
-    if (icon) icon.classList.add('rotate-180');
-  } else {
-    el.classList.add('hidden');
-    if (icon) icon.classList.remove('rotate-180');
+window.toggleAcc = function(id) {
+  const el = document.getElementById(`acc-${id}`);
+  const icon = document.getElementById(`icon-acc-${id}`);
+  if (el) {
+    el.classList.toggle('hidden');
+    if (icon) icon.classList.toggle('rotate-180');
   }
 };
 
-window.promptAddSubcat = function(catId) {
-  const name = prompt('Nombre de la nueva subcategoría:');
-  if (name && name.trim()) {
-    state.data.categories[catId].subcategories.push(name.trim());
-    state.save();
-    renderCategories();
-    showToast(`Subcategoría "${name.trim()}" agregada`);
-  }
-};
-
-window.promptEditBudget = function(catId, current) {
-  const val = prompt(`Nuevo presupuesto mensual para ${state.data.categories[catId].name}:`, current);
+window.editBudgetMacro = function(macro, current) {
+  const val = prompt(`Nuevo presupuesto mensual para ${macro} ($):`, current);
   if (val !== null && !isNaN(val)) {
-    state.updateCategoryBudget(catId, parseFloat(val));
+    state.data.presupuestos[macro] = Number(val);
+    state.save();
     renderAll();
-    showToast('Presupuesto actualizado');
+    showToast(`Presupuesto de ${macro} actualizado`);
   }
 };
 
-function initCategorySearch() {
-  const searchInput = document.getElementById('categorySearch');
-  const clearBtn = document.getElementById('clearSearch');
-  const filterPills = document.querySelectorAll('#filterPills button[data-filter]');
+// Estadísticas & SVG Donut
+function renderStatisticsView() {
+  const totalGastos = state.getTotalGastos();
+  const macroTotals = state.getGastosPorMacroCategoria();
+  const totalSpent = totalGastos || 1;
 
-  let currentFilter = 'all';
+  const statTot = document.getElementById('statTotalExpense');
+  if (statTot) statTot.textContent = state.formatMoney(totalGastos);
 
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      const q = e.target.value;
-      if (clearBtn) {
-        if (q.length > 0) clearBtn.classList.remove('hidden');
-        else clearBtn.classList.add('hidden');
-      }
-      renderCategories(currentFilter, q);
-    });
-  }
+  const curDay = Math.max(1, new Date().getDate());
+  const dailyPace = totalGastos / curDay;
+  const paceEl = document.getElementById('statDailyPace');
+  if (paceEl) paceEl.textContent = `${state.formatMoney(dailyPace)} / día`;
 
-  if (clearBtn && searchInput) {
-    clearBtn.addEventListener('click', () => {
-      searchInput.value = '';
-      clearBtn.classList.add('hidden');
-      renderCategories(currentFilter, '');
-    });
-  }
-
-  filterPills.forEach(pill => {
-    pill.addEventListener('click', () => {
-      filterPills.forEach(p => {
-        p.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
-        p.classList.add('bg-surface-container-lowest', 'text-on-surface-variant');
-      });
-      pill.classList.remove('bg-surface-container-lowest', 'text-on-surface-variant');
-      pill.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
-
-      currentFilter = pill.getAttribute('data-filter');
-      renderCategories(currentFilter, searchInput ? searchInput.value : '');
-    });
-  });
-
-  const btnNewCategory = document.getElementById('btnNewCategory');
-  if (btnNewCategory) {
-    btnNewCategory.addEventListener('click', () => {
-      const name = prompt('Nombre de la nueva categoría:');
-      if (name && name.trim()) {
-        const budget = prompt('Límite de presupuesto mensual (opcional):', '200');
-        state.addCategory(name.trim(), 'category', budget);
-        renderAll();
-        showToast(`Categoría "${name.trim()}" creada con éxito`);
-      }
-    });
-  }
-}
-
-// Statistics Page & Dynamic SVG Donut Chart
-function renderStatistics() {
-  const { expense } = state.getMonthlyTotals();
-  const catTotals = state.getCategoryTotals();
-  const totalSpent = Object.values(catTotals).reduce((a, b) => a + b, 0) || 1;
-
-  // Stat hero
-  const statTotalEl = document.getElementById('statTotalExpense');
-  if (statTotalEl) statTotalEl.textContent = state.formatMoney(expense);
-
-  // Daily pace
-  const daysInMonth = 30;
-  const currentDay = Math.max(1, new Date().getDate());
-  const dailyPace = expense / currentDay;
-  const dailyPaceEl = document.getElementById('statDailyPace');
-  if (dailyPaceEl) dailyPaceEl.textContent = `${state.formatMoney(dailyPace)} / día`;
-
-  // Dynamic SVG Donut segments calculation
-  // Radius = 62, Circumference = 2 * PI * 62 = 389.55
   const circumference = 389.55;
   const donutSvg = document.getElementById('donutSvgContainer');
   const donutLegend = document.getElementById('donutLegendContainer');
 
-  const categories = Object.values(state.data.categories).filter(c => (catTotals[c.id] || 0) > 0);
-  
+  const macros = Object.keys(BD_GASTOS).filter(m => (macroTotals[m] || 0) > 0);
+
   if (donutSvg) {
-    let accumulatedOffset = 0;
-    const colors = ['#006c49', '#004f35', '#2b6954', '#4edea3', '#ba1a1a', '#95d3ba'];
+    let accOffset = 0;
+    let circlesHtml = `<circle cx="80" cy="80" fill="none" r="62" stroke="#eff4ff" stroke-width="20"></circle>`;
 
-    let circlesHtml = `
-      <circle cx="80" cy="80" fill="none" r="62" stroke="#eff4ff" stroke-width="20"></circle>
-    `;
-
-    categories.forEach((cat, idx) => {
-      const amount = catTotals[cat.id] || 0;
-      const fraction = amount / totalSpent;
-      const strokeLen = fraction * circumference;
-      const color = colors[idx % colors.length];
+    macros.forEach(macro => {
+      const amt = macroTotals[macro] || 0;
+      const frac = amt / totalSpent;
+      const len = frac * circumference;
+      const color = BD_GASTOS[macro]?.color || '#006c49';
 
       circlesHtml += `
         <circle class="transition-all duration-500 hover:opacity-80 cursor-pointer" 
           cx="80" cy="80" fill="none" r="62" 
           stroke="${color}" 
-          stroke-dasharray="${strokeLen.toFixed(1)} ${(circumference - strokeLen).toFixed(1)}" 
-          stroke-dashoffset="-${accumulatedOffset.toFixed(1)}" 
+          stroke-dasharray="${len.toFixed(1)} ${(circumference - len).toFixed(1)}" 
+          stroke-dashoffset="-${accOffset.toFixed(1)}" 
           stroke-width="20">
         </circle>
       `;
-      accumulatedOffset += strokeLen;
+      accOffset += len;
     });
-
     donutSvg.innerHTML = circlesHtml;
   }
 
-  // Legend
   if (donutLegend) {
-    const colors = ['#006c49', '#004f35', '#2b6954', '#4edea3', '#ba1a1a', '#95d3ba'];
-    donutLegend.innerHTML = categories.map((cat, idx) => {
-      const amount = catTotals[cat.id] || 0;
-      const pct = Math.round((amount / totalSpent) * 100);
-      const color = colors[idx % colors.length];
+    donutLegend.innerHTML = macros.map(macro => {
+      const amt = macroTotals[macro] || 0;
+      const pct = Math.round((amt / totalSpent) * 100);
+      const color = BD_GASTOS[macro]?.color || '#006c49';
 
       return `
         <div class="flex items-center justify-between p-2 rounded-lg hover:bg-surface-container-low transition-colors">
           <div class="flex items-center gap-space-sm">
             <div class="w-3.5 h-3.5 rounded-full" style="background-color: ${color}"></div>
-            <span class="font-body-md text-on-surface font-medium">${cat.name}</span>
+            <span class="font-body-md text-on-surface font-medium">${macro}</span>
           </div>
           <div class="flex items-center gap-3">
             <span class="text-label-md text-on-surface-variant">${pct}%</span>
-            <span class="text-data-sm text-on-surface font-semibold">${state.formatMoney(amount)}</span>
+            <span class="text-data-sm text-on-surface font-semibold">${state.formatMoney(amt)}</span>
           </div>
         </div>
       `;
@@ -774,201 +697,192 @@ function renderStatistics() {
   }
 }
 
-// Registration Form Logic
-function initRegistrationForm() {
-  let selectedType = 'gasto';
-  let selectedCategory = 'alimentacion';
-  let selectedSubcat = 'Supermercado';
-  let selectedPaymentMethod = 'Tarjeta Visa Débito';
-  let isRecurring = false;
+// Formulario de Registro Dependiente (Gasto: Macro -> Sub -> Concepto | Ingreso: Tipo -> Concepto)
+function initFormSelectors() {
+  let activeType = 'gasto';
+  let selectedMacro = 'Necesidades';
+  let selectedSub = 'Vivienda';
+  let selectedConcepto = 'Alquiler de vivienda';
+  let selectedTipoIngreso = 'Laboral';
+  let selectedConceptoIngreso = 'Nómina Santiago';
 
-  // Segment buttons
-  const typeBtns = document.querySelectorAll('#typeSegment button');
-  typeBtns.forEach(btn => {
+  const typeButtons = document.querySelectorAll('#typeSegment button');
+  const gastoSection = document.getElementById('gastoFields');
+  const ingresoSection = document.getElementById('ingresoFields');
+  const saveBtnText = document.getElementById('saveExpenseText');
+
+  typeButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      typeBtns.forEach(b => {
-        b.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
+      typeButtons.forEach(b => {
+        b.classList.remove('bg-primary', 'text-on-primary', 'shadow-xs');
         b.classList.add('text-on-surface-variant');
       });
-      btn.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
+      btn.classList.add('bg-primary', 'text-on-primary', 'shadow-xs');
       btn.classList.remove('text-on-surface-variant');
-      selectedType = btn.getAttribute('data-type');
 
-      const saveBtnText = document.getElementById('saveExpenseText');
-      if (saveBtnText) {
-        saveBtnText.textContent = selectedType === 'gasto' ? 'Guardar Gasto' : (selectedType === 'ingreso' ? 'Guardar Ingreso' : 'Guardar Transferencia');
+      activeType = btn.getAttribute('data-type');
+      if (activeType === 'gasto') {
+        if (gastoSection) gastoSection.classList.remove('hidden');
+        if (ingresoSection) ingresoSection.classList.add('hidden');
+        if (saveBtnText) saveBtnText.textContent = 'Guardar Gasto en Google Sheets';
+      } else {
+        if (gastoSection) gastoSection.classList.add('hidden');
+        if (ingresoSection) ingresoSection.classList.remove('hidden');
+        if (saveBtnText) saveBtnText.textContent = 'Guardar Ingreso en Google Sheets';
       }
     });
   });
 
-  // Amount input interactive
-  const amountInput = document.getElementById('expenseAmountInput');
-  const amountDisplay = document.getElementById('amountDisplay');
-  if (amountInput && amountDisplay) {
-    amountInput.addEventListener('input', (e) => {
-      const val = e.target.value;
-      amountDisplay.textContent = val ? parseFloat(val).toFixed(2) : '0.00';
-    });
-  }
-
-  // Category cards selector
-  const catGrid = document.getElementById('regCategoryGrid');
-  const subcatContainer = document.getElementById('regSubcategoryList');
-  const subcatTitle = document.getElementById('regSubcategoryTitle');
-
-  function renderRegCategories() {
-    if (!catGrid) return;
-    catGrid.innerHTML = Object.values(state.data.categories).map(cat => {
-      const isSelected = cat.id === selectedCategory;
+  // Render Macro-categorías
+  function renderMacroButtons() {
+    const container = document.getElementById('regMacroGrid');
+    if (!container) return;
+    container.innerHTML = Object.keys(BD_GASTOS).map(macro => {
+      const isSel = macro === selectedMacro;
+      const conf = BD_GASTOS[macro];
       return `
-        <button class="cat-card flex flex-col items-center justify-center p-space-sm rounded-xl transition-all transform active:scale-95 shadow-sm ${isSelected ? 'bg-secondary/15 ring-2 ring-secondary' : 'bg-surface-container-lowest'}" type="button" onclick="selectRegCategory('${cat.id}')">
-          <div class="w-12 h-12 rounded-full ${isSelected ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'} flex items-center justify-center mb-1 shadow-sm">
-            <span class="material-symbols-outlined text-[24px]">${cat.icon}</span>
-          </div>
-          <span class="text-label-md text-center ${isSelected ? 'text-primary font-bold' : 'text-on-surface-variant'} truncate w-full">${cat.name}</span>
+        <button class="p-2.5 rounded-xl flex flex-col items-center justify-center transition-all ${isSel ? 'bg-secondary/15 ring-2 ring-secondary font-bold text-primary' : 'bg-surface-container text-on-surface-variant'}" type="button" onclick="selectMacro('${macro}')">
+          <span class="material-symbols-outlined text-[22px] mb-1">${conf.icon}</span>
+          <span class="text-label-md text-center truncate w-full">${macro}</span>
         </button>
       `;
-    }).join('') + `
-      <button class="flex flex-col items-center justify-center p-space-sm rounded-xl bg-surface-container-low text-secondary transition-all transform active:scale-95 shadow-sm" type="button" onclick="promptNewCategoryFromForm()">
-        <div class="w-12 h-12 rounded-full bg-secondary-container/40 text-secondary flex items-center justify-center mb-1">
-          <span class="material-symbols-outlined text-[24px]">add</span>
-        </div>
-        <span class="text-label-md text-center font-semibold text-secondary truncate w-full">Crear</span>
-      </button>
-    `;
-
-    renderRegSubcategories();
+    }).join('');
+    renderSubcatButtons();
   }
 
-  function renderRegSubcategories() {
-    if (!subcatContainer) return;
-    const cat = state.data.categories[selectedCategory];
-    if (!cat) return;
+  function renderSubcatButtons() {
+    const container = document.getElementById('regSubcatList');
+    if (!container) return;
+    const subcats = Object.keys(BD_GASTOS[selectedMacro]?.subcategorias || {});
+    if (!subcats.includes(selectedSub)) selectedSub = subcats[0] || '';
 
-    if (subcatTitle) {
-      subcatTitle.textContent = `Subcategorías de ${cat.name}`;
-    }
-
-    subcatContainer.innerHTML = cat.subcategories.map(sub => {
-      const isSelected = sub === selectedSubcat;
+    container.innerHTML = subcats.map(sub => {
+      const isSel = sub === selectedSub;
       return `
-        <button class="subcat-pill px-space-sm py-1.5 rounded-lg text-label-md flex items-center gap-1 transition-all ${isSelected ? 'bg-primary text-on-primary shadow-sm font-semibold' : 'bg-surface-container text-on-surface hover:bg-surface-container-high'}" type="button" onclick="selectRegSubcategory('${sub}')">
-          ${isSelected ? '<span class="material-symbols-outlined text-[16px]">check</span>' : ''}
+        <button class="px-3 py-1.5 rounded-lg text-label-md transition-all ${isSel ? 'bg-primary text-on-primary font-semibold shadow-xs' : 'bg-surface-container text-on-surface'}" type="button" onclick="selectSub('${sub}')">
           ${sub}
         </button>
       `;
-    }).join('') + `
-      <button class="px-space-sm py-1.5 rounded-lg bg-surface-container-low text-secondary text-label-md flex items-center gap-1 hover:bg-surface-container transition-colors" type="button" onclick="promptAddSubcat('${cat.id}')">
-        <span class="material-symbols-outlined text-[16px]">add_circle</span> Añadir
-      </button>
-    `;
+    }).join('');
+    renderConceptoOptions();
   }
 
-  window.selectRegCategory = function(catId) {
-    selectedCategory = catId;
-    const cat = state.data.categories[catId];
-    selectedSubcat = (cat && cat.subcategories.length > 0) ? cat.subcategories[0] : 'General';
-    renderRegCategories();
-  };
-
-  window.selectRegSubcategory = function(sub) {
-    selectedSubcat = sub;
-    renderRegSubcategories();
-  };
-
-  window.promptNewCategoryFromForm = function() {
-    const name = prompt('Nombre de la nueva categoría:');
-    if (name && name.trim()) {
-      state.addCategory(name.trim(), 'category', 200);
-      selectedCategory = name.trim().toLowerCase().replace(/\s+/g, '_');
-      renderRegCategories();
-      renderAll();
-    }
-  };
-
-  renderRegCategories();
-
-  // Payment methods
-  document.querySelectorAll('.payment-method-pill').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.payment-method-pill').forEach(b => {
-        b.classList.remove('ring-2', 'ring-secondary', 'bg-surface-container-low');
-        b.classList.add('bg-surface-container');
-      });
-      btn.classList.add('ring-2', 'ring-secondary', 'bg-surface-container-low');
-      btn.classList.remove('bg-surface-container');
-      selectedPaymentMethod = btn.getAttribute('data-method');
-    });
-  });
-
-  // Recurring toggle
-  const toggleBtn = document.getElementById('recurringToggle');
-  const toggleCircle = document.getElementById('toggleCircle');
-  if (toggleBtn) {
-    toggleBtn.addEventListener('click', () => {
-      isRecurring = !isRecurring;
-      toggleBtn.setAttribute('aria-checked', isRecurring);
-      if (isRecurring) {
-        toggleBtn.classList.remove('bg-outline-variant');
-        toggleBtn.classList.add('bg-secondary');
-        toggleCircle.classList.add('translate-x-6');
-      } else {
-        toggleBtn.classList.remove('bg-secondary');
-        toggleBtn.classList.add('bg-outline-variant');
-        toggleCircle.classList.remove('translate-x-6');
-      }
-    });
+  function renderConceptoOptions() {
+    const select = document.getElementById('regConceptoSelect');
+    if (!select) return;
+    const conceptos = BD_GASTOS[selectedMacro]?.subcategorias[selectedSub] || [];
+    selectedConcepto = conceptos[0] || '';
+    select.innerHTML = conceptos.map(c => `<option value="${c}">${c}</option>`).join('');
   }
 
-  // Save Transaction
+  window.selectMacro = function(m) {
+    selectedMacro = m;
+    renderMacroButtons();
+  };
+
+  window.selectSub = function(s) {
+    selectedSub = s;
+    renderSubcatButtons();
+  };
+
+  // Render Ingresos Selectors
+  function renderIngresoSelectors() {
+    const tipoContainer = document.getElementById('regTipoIngresoGrid');
+    if (!tipoContainer) return;
+
+    tipoContainer.innerHTML = Object.keys(BD_INGRESOS).map(tipo => {
+      const isSel = tipo === selectedTipoIngreso;
+      const conf = BD_INGRESOS[tipo];
+      return `
+        <button class="p-2.5 rounded-xl flex flex-col items-center justify-center transition-all ${isSel ? 'bg-secondary/15 ring-2 ring-secondary font-bold text-primary' : 'bg-surface-container text-on-surface-variant'}" type="button" onclick="selectTipoIngreso('${tipo}')">
+          <span class="material-symbols-outlined text-[22px] mb-1">${conf.icon}</span>
+          <span class="text-label-md text-center truncate w-full">${tipo}</span>
+        </button>
+      `;
+    }).join('');
+
+    renderConceptoIngresoOptions();
+  }
+
+  function renderConceptoIngresoOptions() {
+    const select = document.getElementById('regConceptoIngresoSelect');
+    if (!select) return;
+    const conceptos = BD_INGRESOS[selectedTipoIngreso]?.conceptos || [];
+    selectedConceptoIngreso = conceptos[0] || '';
+    select.innerHTML = conceptos.map(c => `<option value="${c}">${c}</option>`).join('');
+  }
+
+  window.selectTipoIngreso = function(t) {
+    selectedTipoIngreso = t;
+    renderIngresoSelectors();
+  };
+
+  renderMacroButtons();
+  renderIngresoSelectors();
+
+  // Guardar Gasto / Ingreso
   const saveBtn = document.getElementById('saveExpenseBtn');
   if (saveBtn) {
     saveBtn.addEventListener('click', () => {
       const amtInput = document.getElementById('expenseAmountInput');
-      const amount = parseFloat(amtInput ? amtInput.value : 0);
+      const val = parseFloat(amtInput ? amtInput.value : 0);
 
-      if (!amount || amount <= 0) {
+      if (!val || val <= 0) {
         alert('Por favor introduce un monto válido.');
         if (amtInput) amtInput.focus();
         return;
       }
 
-      const noteInput = document.getElementById('expenseNote');
-      const title = noteInput && noteInput.value.trim() ? noteInput.value.trim() : (state.data.categories[selectedCategory]?.name || 'Movimiento');
+      const notaInput = document.getElementById('expenseNote');
+      const nota = notaInput ? notaInput.value.trim() : '';
 
-      state.addTransaction({
-        type: selectedType,
-        title,
-        amount,
-        categoryId: selectedCategory,
-        subcategory: selectedSubcat,
-        paymentMethod: selectedPaymentMethod,
-        isRecurring
-      });
+      if (activeType === 'gasto') {
+        const concSelect = document.getElementById('regConceptoSelect');
+        const concepto = concSelect ? concSelect.value : selectedConcepto;
 
-      // Clear input
+        state.addGasto({
+          valor: val,
+          macroCategoria: selectedMacro,
+          subcategoria: selectedSub,
+          concepto: concepto,
+          nota: nota
+        });
+        showToast(`Gasto de ${state.formatMoney(val)} registrado en "Registro de Gastos"`);
+      } else {
+        const concIngresoSelect = document.getElementById('regConceptoIngresoSelect');
+        const concepto = concIngresoSelect ? concIngresoSelect.value : selectedConceptoIngreso;
+
+        state.addIngreso({
+          valor: val,
+          tipoIngreso: selectedTipoIngreso,
+          concepto: concepto,
+          nota: nota
+        });
+        showToast(`Ingreso de ${state.formatMoney(val)} registrado en "Registro de Ingresos"`);
+      }
+
       if (amtInput) amtInput.value = '';
-      if (amountDisplay) amountDisplay.textContent = '0.00';
-      if (noteInput) noteInput.value = '';
-
+      if (notaInput) notaInput.value = '';
       renderAll();
-      showToast(`${selectedType === 'gasto' ? 'Gasto' : 'Ingreso'} de ${state.formatMoney(amount)} guardado con éxito`);
       switchView('inicio');
     });
   }
 }
 
-// Notifications modal
-function initNotificationsModal() {
-  const modal = document.getElementById('notificationsModal');
-  const closeBtn = document.getElementById('closeNotificationsBtn');
-  const openBtns = document.querySelectorAll('[data-open-notifications]');
+// Configuración de URL de Google Apps Script
+function initSheetsConfigModal() {
+  const modal = document.getElementById('sheetsConfigModal');
+  const openBtn = document.getElementById('openSheetsConfigBtn');
+  const closeBtn = document.getElementById('closeSheetsConfigBtn');
+  const saveBtn = document.getElementById('saveSheetsUrlBtn');
+  const input = document.getElementById('googleScriptUrlInput');
 
-  openBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (modal) modal.classList.add('open');
+  if (openBtn && modal) {
+    openBtn.addEventListener('click', () => {
+      if (input) input.value = state.data.googleScriptUrl || '';
+      modal.classList.add('open');
     });
-  });
+  }
 
   if (closeBtn && modal) {
     closeBtn.addEventListener('click', () => {
@@ -976,14 +890,19 @@ function initNotificationsModal() {
     });
   }
 
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.classList.remove('open');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      if (input) {
+        state.data.googleScriptUrl = input.value.trim();
+        state.save();
+        if (modal) modal.classList.remove('open');
+        showToast('URL de sincronización guardada');
+      }
     });
   }
 }
 
-// Toast Feedback System
+// Toast
 function showToast(message) {
   const toast = document.getElementById('toast');
   const toastMsg = document.getElementById('toastMessage');
@@ -991,8 +910,5 @@ function showToast(message) {
 
   toastMsg.textContent = message;
   toast.classList.add('show');
-
-  setTimeout(() => {
-    toast.classList.remove('show');
-  }, 3200);
+  setTimeout(() => toast.classList.remove('show'), 3500);
 }

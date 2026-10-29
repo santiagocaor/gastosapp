@@ -141,6 +141,11 @@
         </div>
 
         <div class="flex items-center gap-space-xs shrink-0">
+          <!-- Google Sheets Sync Config Button -->
+          <button id="openSheetsConfigBtn" aria-label="Sincronizar Google Sheets" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-secondary hover:bg-surface-container-low transition-colors" type="button" title="Configurar Google Sheets">
+            <span class="material-symbols-outlined text-[22px]">table_chart</span>
+          </button>
+
           <!-- Notification Bell -->
           <button aria-label="Notificaciones" data-open-notifications class="relative w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" type="button">
             <span class="material-symbols-outlined text-[22px]">notifications</span>
@@ -320,17 +325,13 @@
         
         <!-- Type Segmented Control -->
         <div id="typeSegment" class="w-full bg-surface-container-low p-space-xs rounded-xl shadow-xs flex items-center justify-between">
-          <button data-type="gasto" class="flex-1 py-2 px-space-sm rounded-lg bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-1 shadow-xs transition-all" type="button">
+          <button data-type="gasto" class="flex-1 py-2 px-space-sm rounded-lg bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-1 shadow-xs transition-all font-semibold" type="button">
             <span class="material-symbols-outlined text-[18px]">trending_down</span>
             Gasto
           </button>
           <button data-type="ingreso" class="flex-1 py-2 px-space-sm rounded-lg text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface flex items-center justify-center gap-1 transition-all" type="button">
             <span class="material-symbols-outlined text-[18px]">trending_up</span>
             Ingreso
-          </button>
-          <button data-type="transferencia" class="flex-1 py-2 px-space-sm rounded-lg text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface flex items-center justify-center gap-1 transition-all" type="button">
-            <span class="material-symbols-outlined text-[18px]">sync_alt</span>
-            Transferencia
           </button>
         </div>
 
@@ -340,140 +341,94 @@
           <div class="absolute -left-10 -bottom-10 w-36 h-36 rounded-full bg-secondary/20 blur-xl pointer-events-none"></div>
 
           <div class="relative z-10 flex items-center gap-space-xs mb-space-xs">
-            <span class="text-on-primary-container font-label-md uppercase tracking-wider">Monto a Registrar</span>
-            <button id="currencyBtn" class="bg-surface-container-lowest/15 hover:bg-surface-container-lowest/25 px-space-sm py-0.5 rounded-full text-primary-fixed font-data-sm flex items-center gap-1 transition-colors" type="button">
-              <span class="activeCurrencyText">USD ($)</span>
-              <span class="material-symbols-outlined text-[14px]">expand_more</span>
-            </button>
+            <span class="text-on-primary-container font-label-md uppercase tracking-wider">Valor / Monto</span>
+            <span class="bg-surface-container-lowest/15 px-space-sm py-0.5 rounded-full text-primary-fixed font-data-sm">
+              COP ($)
+            </span>
           </div>
 
           <!-- Main Amount Interactive Display & Input -->
           <div class="relative z-10 flex items-center justify-center gap-1 my-space-xs">
-            <span class="currencySymbolText text-primary-fixed font-display-lg-mobile opacity-80">$</span>
-            <input id="expenseAmountInput" type="number" step="0.01" min="0" placeholder="0.00" class="w-48 bg-transparent text-center font-data-metric text-[44px] leading-none tracking-tight font-bold text-on-primary outline-none border-b border-primary-fixed/30 focus:border-primary-fixed"/>
+            <span class="text-primary-fixed font-display-lg-mobile opacity-80">$</span>
+            <input id="expenseAmountInput" type="number" step="1000" min="0" placeholder="0" class="w-56 bg-transparent text-center font-data-metric text-[40px] leading-none tracking-tight font-bold text-on-primary outline-none border-b border-primary-fixed/30 focus:border-primary-fixed"/>
           </div>
 
           <p class="relative z-10 text-on-primary-container font-body-sm flex items-center gap-1">
-            <span class="material-symbols-outlined text-[15px] text-secondary-fixed">verified</span>
-            Presupuesto mensual: <span class="font-data-sm text-primary-fixed ml-1">Disponible $420.00</span>
+            <span class="material-symbols-outlined text-[15px] text-secondary-fixed">cloud_sync</span>
+            Se sincroniza con: <span class="font-data-sm text-primary-fixed ml-1">BDGastosApp</span>
           </p>
         </div>
 
-        <!-- Category Selector Section -->
-        <div class="flex flex-col space-y-space-xs">
-          <div class="flex items-center justify-between">
-            <span class="font-headline-sm text-on-surface">Categoría Principal</span>
-            <span class="font-label-md text-secondary font-medium">1 seleccionada</span>
-          </div>
-
-          <!-- Dynamic Categories Grid -->
-          <div id="regCategoryGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-space-xs">
-            <!-- Populated dynamically by app.js -->
-          </div>
-        </div>
-
-        <!-- Interactive Subcategories Section -->
-        <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-space-sm">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-secondary text-[20px]">subdirectory_arrow_right</span>
-              <span id="regSubcategoryTitle" class="font-label-lg text-on-surface">Subcategorías</span>
-            </div>
-            <span class="font-body-sm text-on-surface-variant">Opcional</span>
-          </div>
-
-          <!-- Horizontal Pill Pills -->
-          <div id="regSubcategoryList" class="flex flex-wrap gap-space-xs pt-1">
-            <!-- Populated dynamically by app.js -->
-          </div>
-        </div>
-
-        <!-- Detail Inputs Card -->
-        <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-space-md">
-          <!-- Fecha y Hora -->
-          <div class="flex items-center justify-between gap-space-sm">
-            <div class="flex items-center gap-space-xs text-on-surface">
-              <div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-                <span class="material-symbols-outlined text-[20px]">calendar_today</span>
-              </div>
-              <div class="flex flex-col">
-                <span class="font-label-md text-on-surface-variant">Fecha de registro</span>
-                <span class="font-label-lg text-on-surface font-semibold">Hoy, Nov 2024</span>
-              </div>
-            </div>
-            <button class="px-space-sm py-1 rounded bg-surface-container-low text-secondary font-label-md hover:bg-surface-container" type="button" onclick="alert('Se asigna la fecha y hora actual automáticamente.')">
-              Actual
-            </button>
-          </div>
-
-          <!-- Método de Pago -->
-          <div class="space-y-space-xs">
-            <label class="font-label-md text-on-surface-variant block">Método de Pago</label>
-            <div class="grid grid-cols-3 gap-2">
-              <button data-method="Tarjeta Visa Débito" class="payment-method-pill ring-2 ring-secondary bg-surface-container-low p-2 rounded-lg flex flex-col items-center justify-center text-center transition-all" type="button">
-                <span class="material-symbols-outlined text-[20px] text-primary">credit_card</span>
-                <span class="text-label-md font-semibold mt-1">Visa</span>
-              </button>
-              <button data-method="Efectivo" class="payment-method-pill bg-surface-container p-2 rounded-lg flex flex-col items-center justify-center text-center transition-all" type="button">
-                <span class="material-symbols-outlined text-[20px] text-secondary">payments</span>
-                <span class="text-label-md font-semibold mt-1">Efectivo</span>
-              </button>
-              <button data-method="Tarjeta Crédito" class="payment-method-pill bg-surface-container p-2 rounded-lg flex flex-col items-center justify-center text-center transition-all" type="button">
-                <span class="material-symbols-outlined text-[20px] text-tertiary">contactless</span>
-                <span class="text-label-md font-semibold mt-1">Crédito</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Nota / Concepto -->
+        <!-- SECCIÓN DINÁMICA: GASTOS (Macro-categoría -> Subcategoría -> Concepto) -->
+        <div id="gastoFields" class="space-y-space-md">
+          <!-- 1. Macro-categoría -->
           <div class="space-y-1">
-            <label class="font-label-md text-on-surface-variant block" for="expenseNote">Nota o concepto</label>
-            <div class="relative flex items-center">
-              <span class="material-symbols-outlined absolute left-3 text-outline text-[20px]">edit_note</span>
-              <input id="expenseNote" class="w-full h-12 pl-10 pr-space-md rounded-lg bg-surface-container-low text-on-surface font-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container" placeholder="Ej. Compra semanal de despensa" type="text"/>
+            <label class="font-headline-sm text-on-surface block">1. Macro-categoría</label>
+            <div id="regMacroGrid" class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              <!-- Cargado dinámicamente: Necesidades, Deseos, Deudas, Ahorros, Inversiones -->
             </div>
           </div>
 
-          <!-- Adjuntar Comprobante -->
-          <div class="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-low">
-            <div class="flex items-center gap-space-xs">
-              <div class="w-10 h-10 rounded-lg bg-surface-container text-secondary flex items-center justify-center">
-                <span class="material-symbols-outlined text-[22px]">receipt_long</span>
-              </div>
-              <div class="flex flex-col">
-                <span class="font-label-md text-on-surface font-semibold">Comprobante o ticket</span>
-                <span class="font-body-sm text-on-surface-variant">Sube una foto o PDF</span>
-              </div>
+          <!-- 2. Subcategoría -->
+          <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-label-lg text-on-surface font-semibold">2. Subcategoría</span>
+              <span class="text-[12px] text-secondary font-medium">Dependiente</span>
             </div>
-            <button class="h-9 px-space-sm rounded-lg bg-surface-container-highest text-primary font-label-md flex items-center gap-1 hover:bg-surface-container transition-colors" type="button" onclick="alert('📸 Puedes tomar una foto del recibo para anexarlo.')">
-              <span class="material-symbols-outlined text-[18px]">photo_camera</span>
-              Subir
-            </button>
+            <div id="regSubcatList" class="flex flex-wrap gap-2 pt-1">
+              <!-- Cargado dinámicamente -->
+            </div>
           </div>
 
-          <!-- Recurring Expense Switch -->
-          <div class="flex items-center justify-between pt-1">
-            <div class="flex items-center gap-space-xs">
-              <span class="material-symbols-outlined text-secondary text-[22px]">update</span>
-              <div class="flex flex-col">
-                <span class="font-label-md text-on-surface font-semibold">Gasto recurrente</span>
-                <span class="font-body-sm text-on-surface-variant">Programar cada mes automáticamente</span>
-              </div>
+          <!-- 3. Concepto de Gasto -->
+          <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-2">
+            <label class="font-label-lg text-on-surface font-semibold block" for="regConceptoSelect">3. Concepto de Gasto</label>
+            <div class="relative">
+              <select id="regConceptoSelect" class="w-full h-12 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary">
+                <!-- Opciones según la subcategoría -->
+              </select>
             </div>
-            <button id="recurringToggle" aria-checked="false" class="w-12 h-6 rounded-full bg-outline-variant p-0.5 transition-colors duration-200 ease-in-out flex items-center" role="switch" type="button">
-              <span id="toggleCircle" class="w-5 h-5 rounded-full bg-surface-container-lowest shadow-sm transform transition-transform duration-200 ease-in-out pointer-events-none translate-x-0"></span>
-            </button>
+          </div>
+        </div>
+
+        <!-- SECCIÓN DINÁMICA: INGRESOS (Tipo de Ingreso -> Concepto de Ingreso) -->
+        <div id="ingresoFields" class="space-y-space-md hidden">
+          <!-- 1. Tipo de Ingreso -->
+          <div class="space-y-1">
+            <label class="font-headline-sm text-on-surface block">1. Tipo de Ingreso</label>
+            <div id="regTipoIngresoGrid" class="grid grid-cols-2 gap-2">
+              <!-- Laboral, Gubernamental, Capacitación, Servicios -->
+            </div>
+          </div>
+
+          <!-- 2. Concepto de Ingreso -->
+          <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-2">
+            <label class="font-label-lg text-on-surface font-semibold block" for="regConceptoIngresoSelect">2. Concepto de Ingreso</label>
+            <div class="relative">
+              <select id="regConceptoIngresoSelect" class="w-full h-12 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary">
+                <!-- Opciones según el tipo de ingreso -->
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nota / Detalle común -->
+        <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-2">
+          <label class="font-label-md text-on-surface-variant block" for="expenseNote">Nota o descripción (opcional)</label>
+          <div class="relative flex items-center">
+            <span class="material-symbols-outlined absolute left-3 text-outline text-[20px]">edit_note</span>
+            <input id="expenseNote" class="w-full h-12 pl-10 pr-space-md rounded-lg bg-surface-container-low text-on-surface font-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container" placeholder="Ej. Pago mensual de arriendo" type="text"/>
           </div>
         </div>
 
         <!-- Primary Action CTA Button -->
         <div class="w-full pt-space-xs pb-space-lg">
           <button id="saveExpenseBtn" class="w-full h-14 rounded-xl bg-primary text-on-primary font-label-lg flex items-center justify-center gap-2 shadow-md hover:bg-tertiary transition-transform active:scale-[0.98]" type="button">
-            <span class="material-symbols-outlined text-[22px]">check_circle</span>
-            <span id="saveExpenseText">Guardar Gasto</span>
+            <span class="material-symbols-outlined text-[22px]">cloud_upload</span>
+            <span id="saveExpenseText">Guardar Gasto en Google Sheets</span>
           </button>
           <p class="text-center font-body-sm text-on-surface-variant mt-2">
-            Se sincronizará al instante con tu presupuesto mensual
+            Se registrará en la pestaña correspondiente de tu Google Sheet
           </p>
         </div>
 
@@ -734,6 +689,31 @@
               <p class="text-body-sm text-on-surface-variant">Llevas 8.5% menos de gasto comparado con el mes anterior. ¡Excelente ritmo!</p>
             </div>
           </div>
+        </div>
+      </div>
+    <!-- Modal de Configuración de Google Sheets -->
+    <div id="sheetsConfigModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+      <div class="w-full max-w-sm bg-surface-container-lowest rounded-2xl p-space-lg shadow-2xl space-y-space-md border border-slate-200">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2 text-secondary">
+            <span class="material-symbols-outlined text-[24px]">table_chart</span>
+            <h3 class="font-headline-sm text-on-surface">Conectar Google Sheets</h3>
+          </div>
+          <button id="closeSheetsConfigBtn" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant" type="button">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <p class="text-body-sm text-on-surface-variant">
+          Pega la URL de tu aplicación web de Google Apps Script para sincronizar en tiempo real con <b>BDGastosApp</b>.
+        </p>
+        <div class="space-y-1">
+          <label class="text-label-md font-semibold text-on-surface block" for="googleScriptUrlInput">URL Webhook de Google Apps Script</label>
+          <input id="googleScriptUrlInput" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm border border-slate-200 outline-none focus:ring-2 focus:ring-secondary" placeholder="https://script.google.com/macros/s/.../exec" type="url"/>
+        </div>
+        <div class="pt-2 flex gap-2">
+          <button id="saveSheetsUrlBtn" class="flex-1 h-11 bg-primary hover:bg-tertiary text-on-primary rounded-xl font-label-lg font-semibold shadow-xs transition-colors" type="button">
+            Guardar y Sincronizar
+          </button>
         </div>
       </div>
     </div>

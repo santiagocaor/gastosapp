@@ -9,6 +9,7 @@ package-lock.json
 *.log
 
 # OS & IDE Files
+*.gsheet
 .DS_Store
 Thumbs.db
 .vscode/
