@@ -2794,35 +2794,6 @@ function updateConverterUI() {
     }
   }
 
-  renderConverterPresets();
-}
-
-function renderConverterPresets() {
-  const container = document.getElementById('converterPresetChips');
-  if (!container) return;
-
-  const isCopToCad = CONVERTER_STATE.direction === 'COP_TO_CAD';
-  const presets = isCopToCad
-    ? [
-        { label: '$50k COP', val: 50000 },
-        { label: '$100k COP', val: 100000 },
-        { label: '$200k COP', val: 200000 },
-        { label: '$500k COP', val: 500000 },
-        { label: '$1M COP', val: 1000000 }
-      ]
-    : [
-        { label: '$25 CAD', val: 25 },
-        { label: '$50 CAD', val: 50 },
-        { label: '$100 CAD', val: 100 },
-        { label: '$250 CAD', val: 250 },
-        { label: '$500 CAD', val: 500 }
-      ];
-
-  container.innerHTML = presets.map(p => `
-    <button onclick="setConverterValue(${p.val})" class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant hover:text-primary hover:bg-surface-container-high transition-colors font-medium whitespace-nowrap cursor-pointer text-[11px]" type="button">
-      ${p.label}
-    </button>
-  `).join('');
 }
 
 function calculateConversion() {
@@ -2858,14 +2829,6 @@ window.setConversionDirection = function(dir) {
 window.toggleConversionDirection = function() {
   const newDir = CONVERTER_STATE.direction === 'COP_TO_CAD' ? 'CAD_TO_COP' : 'COP_TO_CAD';
   window.setConversionDirection(newDir);
-};
-
-window.setConverterValue = function(val) {
-  const input = document.getElementById('converterInput');
-  if (input) {
-    input.value = val;
-    calculateConversion();
-  }
 };
 
 // ========================================================
