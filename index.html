@@ -519,6 +519,22 @@
             <label class="text-label-md text-on-surface font-bold block" for="regConceptoSelect">3. Concepto de Gasto</label>
             <select id="regConceptoSelect" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary cursor-pointer"></select>
           </div>
+
+          <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs space-y-1.5 border border-slate-100">
+            <span class="text-label-md text-on-surface font-bold block">4. Medio de pago</span>
+            <div id="medioPagoSegment" class="flex items-center bg-surface-container-low p-1 rounded-xl" role="group" aria-label="Medio de pago">
+              <button type="button" data-action="set-medio" data-medio="debito" class="flex-1 py-1.5 rounded-lg text-label-md font-semibold flex items-center justify-center gap-1 transition-all">
+                <span class="material-symbols-outlined text-[16px]">account_balance</span> Débito
+              </button>
+              <button type="button" data-action="set-medio" data-medio="efectivo" class="flex-1 py-1.5 rounded-lg text-label-md font-semibold flex items-center justify-center gap-1 transition-all">
+                <span class="material-symbols-outlined text-[16px]">payments</span> Efectivo
+              </button>
+              <button type="button" data-action="set-medio" data-medio="credito" class="flex-1 py-1.5 rounded-lg text-label-md font-semibold flex items-center justify-center gap-1 transition-all">
+                <span class="material-symbols-outlined text-[16px]">credit_card</span> Crédito
+              </button>
+            </div>
+            <p id="medioPagoHint" class="text-[11px] text-on-surface-variant"></p>
+          </div>
         </div>
 
         <!-- SECCIÓN DINÁMICA: INGRESOS (Tipo de Ingreso -> Concepto de Ingreso) -->

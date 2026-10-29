@@ -18,6 +18,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Gastos por macro-categoría → subcategoría → concepto (Necesidades, Deseos, Deudas, Ahorros, Inversiones).
   - Ingresos por tipo → concepto.
   - **Monto en CAD o COP** (CAD por defecto) con la equivalencia en la otra moneda.
+  - **Medio de pago** de cada gasto: Débito, Efectivo o Tarjeta de crédito (se recuerda el último usado).
   - **Fecha editable** (para registrar movimientos de días anteriores) y nota opcional.
   - **Repetir cada mes**: convierte el movimiento en recurrente.
 - 🔁 **Movimientos recurrentes** (arriendo, nómina, suscripciones, cuota de la TC)
@@ -35,7 +36,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Donut por categoría, barras de ingresos vs. gastos de los últimos 6 meses y top 5 de conceptos.
 - 🧾 **Movimientos**
   - Todo el historial con buscador (concepto, nota o categoría, sin importar tildes).
-  - Filtros por tipo (gastos/ingresos), categoría y periodo (mes elegido o todo), con totales de lo filtrado.
+  - Filtros por tipo (gastos/ingresos), categoría, medio de pago y periodo (mes elegido o todo), con totales de lo filtrado.
   - Agrupado por mes con el neto de cada uno; toca un movimiento para editarlo.
 - 💰 **Presupuesto**
   - Límites mensuales editables en línea por macro-categoría, estado de cada uno y proyección de cierre de mes.
@@ -69,11 +70,12 @@ Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del sc
 
 ### Cómo funciona
 
-- **La hoja está en CAD.** La columna **Valor (CAD)** guarda el monto en dólares canadienses; al final de cada pestaña se agregan **ID**, **Moneda** (en qué moneda se registró), **Monto original** (en esa moneda) y **Tasa CAD→COP** (se buscan por encabezado, así que puedes moverlas).
+- **Tarjeta de crédito:** cada compra con la TC se registra como gasto en su categoría el día de la compra, con medio de pago *Tarjeta de crédito*. El pago de la tarjeta a fin de mes **no** es un gasto (solo mueve dinero de la cuenta a la tarjeta); en *Deudas → Tarjetas de crédito → Intereses y cargos TC* registra solo intereses, cuota de manejo o cargos del banco. En *Movimientos* filtra por “Tarjeta de crédito” para ver cuánto llevas cargado.
+- **La hoja está en CAD.** La columna **Valor (CAD)** guarda el monto en dólares canadienses; al final de cada pestaña se agregan **ID**, **Moneda** (en qué moneda se registró), **Monto original** (en esa moneda), **Tasa CAD→COP** y **Medio de pago** (se buscan por encabezado, así que puedes moverlas).
 - **Migración automática (una vez):** al sincronizar por primera vez con el script v4, las filas que estaban en COP se convierten a CAD con la tasa del día; su monto exacto en COP queda en *Monto original*. Las registradas en CAD recuperan su monto original exacto.
 - **Puedes editar la hoja a mano:** *Valor (CAD)* manda. Si lo cambias, la app ajusta el monto original; una fila nueva escrita a mano se toma como CAD y recibe su id.
 - Hacia la app el script entrega el valor en COP y en CAD, así una versión vieja de la app abierta en otro dispositivo no muestra cifras erradas.
-- Con un script anterior (v2/v3) la app sigue funcionando, pero avisa para actualizarlo a la v4.
+- Con un script anterior la app sigue funcionando (conserva la moneda y el medio de pago en el dispositivo), pero avisa para actualizarlo a la v5.
 - La app envía `POST` con JSON en `text/plain` (sin preflight CORS), lee la respuesta y solo marca un cambio como enviado cuando el script confirma `ok`.
 - Sin conexión, los cambios quedan **pendientes** (☁️ tachado) y se envían solos al volver la red o al abrir la app; también con *Reenviar pendientes*.
 - La app se sincroniza sola al abrirse y al volver a ella (como máximo cada 2 minutos), o con *Sincronizar ahora*.

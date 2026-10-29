@@ -1,5 +1,5 @@
 /**
- * GastosApp ⇄ Google Sheets (BDGastosApp) — protocolo v4
+ * GastosApp ⇄ Google Sheets (BDGastosApp) — protocolo v5
  *
  * Pega este archivo en Extensiones → Apps Script de tu hoja y publícalo como
  * aplicación web (Ejecutar como: tú · Acceso: cualquier usuario).
@@ -17,7 +17,8 @@
  *   Moneda          moneda en que se registró (CAD o COP)
  *   Monto original  monto en esa moneda
  *   Tasa CAD→COP    tasa usada para convertir
- * Las columnas ID, Moneda, Monto original y Tasa se agregan al final si faltan
+ *   Medio de pago   Débito, Efectivo o Tarjeta de crédito (solo gastos)
+ * Las columnas ID, Moneda, Monto original, Tasa y Medio de pago se agregan al final si faltan
  * (se buscan por su encabezado, así que puedes moverlas). La primera vez, las
  * filas que estaban en COP se convierten a CAD con la tasa del día que envía la
  * app; su monto en COP queda en "Monto original".
@@ -44,13 +45,14 @@ const CONFIG = {
   }
 };
 
-const VERSION = 4;
+const VERSION = 5;
 const ID_HEADER = 'ID';
 // Columnas que se ubican por su encabezado: [campo, encabezado]
 const EXTRA_COLUMNS = [
   ['moneda', 'Moneda'],
   ['montoOriginal', 'Monto original'],
-  ['tasa', 'Tasa CAD→COP']
+  ['tasa', 'Tasa CAD→COP'],
+  ['medioPago', 'Medio de pago']
 ];
 const VALOR_COL = 2; // columna B: Valor (CAD)
 
@@ -249,6 +251,8 @@ function list_(type, body) {
     rec.fecha = formatDate_(rec.fecha, tz);
     rec.concepto = String(rec.concepto || '');
     rec.nota = String(rec.nota || '');
+    const medio = String(row[extraCols.medioPago - 1] || '').trim();
+    if (medio) rec.medioPago = medio;
 
     let moneda = String(row[extraCols.moneda - 1] || '').trim().toUpperCase();
     let original = toNumber_(row[extraCols.montoOriginal - 1]);
@@ -319,6 +323,8 @@ function upsert_(body) {
   sh.getRange(row, extraCols.moneda).setValue(moneda);
   sh.getRange(row, extraCols.montoOriginal).setValue(original);
   sh.getRange(row, extraCols.tasa).setValue(tasa);
+  // Medio de pago: solo si la app lo envía (las versiones antiguas no lo hacen)
+  if (body.paymentType !== undefined) sh.getRange(row, extraCols.medioPago).setValue(String(body.paymentType || ''));
   sh.getRange(row, 1).setNumberFormat('yyyy-mm-dd');
   if (inCad) sh.getRange(row, VALOR_COL).setNumberFormat('#,##0.00');
   return { ok: true, action: 'upsert', id: id, row: row, valorCAD: inCad ? rec.valor : undefined };

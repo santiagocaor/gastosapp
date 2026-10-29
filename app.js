@@ -36,7 +36,7 @@ const BD_GASTOS = {
     color: "#ba1a1a",
     subcategorias: {
       "Préstamos bancarios": ["Cuota mensual de préstamo"],
-      "Tarjetas de crédito": ["Pago mensual de TC"],
+      "Tarjetas de crédito": ["Intereses y cargos TC"],
       "Deudas familiares": ["Cuota periódica pactada con familiares"]
     }
   },
@@ -264,6 +264,24 @@ function sortMovements(a, b) {
   return String(b.fecha || '').localeCompare(String(a.fecha || '')) || (b.createdAt || 0) - (a.createdAt || 0);
 }
 
+// Medios de pago de los gastos: código guardado → nombre e ícono
+const MEDIOS_PAGO = {
+  debito: { label: 'Débito', short: 'Débito', icon: 'account_balance' },
+  efectivo: { label: 'Efectivo', short: 'Efectivo', icon: 'payments' },
+  credito: { label: 'Tarjeta de crédito', short: 'TC', icon: 'credit_card' }
+};
+
+// Acepta el código o el nombre que llega de Sheets ("Tarjeta de crédito", "Débito"...)
+function normalizeMedio(v) {
+  const t = normalizeText(v).trim();
+  if (!t) return undefined;
+  if (MEDIOS_PAGO[t]) return t;
+  if (t.startsWith('tarjeta') || t.includes('credito') || t === 'tc') return 'credito';
+  if (t.startsWith('debito')) return 'debito';
+  if (t.startsWith('efectivo')) return 'efectivo';
+  return undefined;
+}
+
 // Nombres cortos para mostrar; en la app y en Sheets se guarda el concepto completo
 const SHORT_CONCEPTS = {
   "Tarjeta de transporte público": "Transporte público",
@@ -407,6 +425,7 @@ class AppState {
     if (!['COP', 'CAD'].includes(d.presupuestoMoneda)) d.presupuestoMoneda = 'COP';
     if (typeof d.sheetsVersion !== 'number') d.sheetsVersion = 0;
     if (!Array.isArray(d.recurrentes)) d.recurrentes = [];
+    if (!MEDIOS_PAGO[d.registroMedio]) d.registroMedio = 'debito';
   }
 
   save() {
@@ -506,6 +525,7 @@ class AppState {
         amount: item.valor,
         note: item.nota || "",
         paymentMethod: item.nota || "", // nombre que usaba el script antiguo
+        paymentType: MEDIOS_PAGO[item.medioPago]?.label || "",
         ...currency
       };
     }
@@ -693,6 +713,8 @@ class AppState {
     const base = { id: String(r.id), fecha: normalizeSheetDate(String(r.fecha || '')), valor: toAmount(r.valor), concepto: r.concepto || "", nota: r.nota || "", synced: true, remote: true };
     // Movimientos creados por un recurrente (en este u otro dispositivo): rec_<plantilla>_<mes>
     if (base.id.startsWith('rec_')) base.recurrenteId = base.id.split('_')[1];
+    const medio = normalizeMedio(r.medioPago);
+    if (medio) base.medioPago = medio;
     if (r.moneda === 'CAD' && toAmount(r.montoOriginal) > 0) {
       Object.assign(base, { moneda: 'CAD', montoOriginal: toAmount(r.montoOriginal), tasa: toAmount(r.tasa) || (base.valor / toAmount(r.montoOriginal)) });
     } else if (r.moneda === 'COP') {
@@ -750,6 +772,8 @@ class AppState {
               const prev = localById.get(m.id);
               if (!prev) return m;
               const merged = { ...m, createdAt: prev.createdAt, recurrenteId: prev.recurrenteId };
+              // Script sin columna de medio de pago: se conserva el guardado en la app
+              if (!m.medioPago && prev.medioPago) merged.medioPago = prev.medioPago;
               // Script sin columnas de moneda: se conserva la moneda original guardada en la app
               if (!m.moneda && prev.moneda === 'CAD' && Math.round(prev.valor) === Math.round(m.valor)) {
                 Object.assign(merged, { moneda: 'CAD', montoOriginal: prev.montoOriginal, tasa: prev.tasa });
@@ -788,7 +812,7 @@ class AppState {
 
   exportCSV() {
     const cell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['Tipo', 'Fecha', 'Valor (COP)', 'Categoría', 'Subcategoría', 'Concepto', 'Nota', 'Moneda', 'Monto original', 'Tasa CAD→COP']];
+    const rows = [['Tipo', 'Fecha', 'Valor (COP)', 'Categoría', 'Subcategoría', 'Concepto', 'Nota', 'Moneda', 'Monto original', 'Tasa CAD→COP', 'Medio de pago']];
     [...this.data.gastos.map(g => ({ ...g, t: 'Gasto' })), ...this.data.ingresos.map(i => ({ ...i, t: 'Ingreso' }))]
       .sort(sortMovements)
       .forEach(m => rows.push([
@@ -796,7 +820,8 @@ class AppState {
         m.t === 'Gasto' ? m.macroCategoria : m.tipoIngreso,
         m.t === 'Gasto' ? m.subcategoria : '',
         m.concepto, m.nota,
-        m.moneda === 'CAD' ? 'CAD' : 'COP', m.moneda === 'CAD' ? m.montoOriginal : '', m.moneda === 'CAD' ? m.tasa : ''
+        m.moneda === 'CAD' ? 'CAD' : 'COP', m.moneda === 'CAD' ? m.montoOriginal : '', m.moneda === 'CAD' ? m.tasa : '',
+        MEDIOS_PAGO[m.medioPago]?.label || ''
       ]));
     return '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n');
   }
@@ -1006,6 +1031,7 @@ function initActions() {
       case 'use-concept': useConcept(d.macro, d.sub, d.concepto); break;
       case 'reset-budgets': resetBudgets(); break;
       case 'set-form-currency': setFormCurrency(d.currency); break;
+      case 'set-medio': setFormMedio(d.medio); break;
       case 'toggle-display-currency':
         state.data.displayCurrency = displayCurrency() === 'CAD' ? 'COP' : 'CAD';
         state.save();
@@ -1229,6 +1255,9 @@ function movementRow(m) {
   const pending = m.synced === false && state.data.googleScriptUrl
     ? `<span class="material-symbols-outlined text-[14px] text-outline align-middle" title="Pendiente de enviar a Google Sheets">cloud_off</span>`
     : '';
+  const medio = isGasto && MEDIOS_PAGO[m.medioPago]
+    ? `<span class="material-symbols-outlined text-[14px] text-outline align-middle" title="${MEDIOS_PAGO[m.medioPago].label}">${MEDIOS_PAGO[m.medioPago].icon}</span>`
+    : '';
   const recurring = m.recurrenteId
     ? `<span class="material-symbols-outlined text-[14px] text-secondary align-middle" title="Movimiento recurrente">event_repeat</span>`
     : '';
@@ -1246,7 +1275,7 @@ function movementRow(m) {
         </div>
         <div class="flex flex-col min-w-0">
           <span class="text-body-md font-semibold text-on-surface truncate">${title}</span>
-          <span class="text-body-sm text-on-surface-variant truncate">${subtitle} • ${escapeHtml(formatDisplayDate(m.fecha))} ${recurring}${pending}</span>
+          <span class="text-body-sm text-on-surface-variant truncate">${subtitle} • ${escapeHtml(formatDisplayDate(m.fecha))} ${medio}${recurring}${pending}</span>
           ${m.nota ? `<span class="text-[11px] text-outline truncate italic">${escapeHtml(m.nota)}</span>` : ''}
         </div>
       </div>
@@ -1302,7 +1331,8 @@ function initMovementsFilters() {
   if (cat) {
     cat.innerHTML = `<option value="all">Todas las categorías</option>
       <optgroup label="Gastos">${Object.keys(BD_GASTOS).map(m => `<option value="g:${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</optgroup>
-      <optgroup label="Ingresos">${Object.keys(BD_INGRESOS).map(t => `<option value="i:${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}</optgroup>`;
+      <optgroup label="Ingresos">${Object.keys(BD_INGRESOS).map(t => `<option value="i:${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}</optgroup>
+      <optgroup label="Gastos por medio de pago">${Object.entries(MEDIOS_PAGO).map(([k, v]) => `<option value="m:${k}">${escapeHtml(v.label)}</option>`).join('')}</optgroup>`;
     cat.addEventListener('change', () => { ui.mov.cat = cat.value; renderMovementsView(); });
   }
 }
@@ -1335,7 +1365,9 @@ function renderMovementsView() {
   if (f.cat !== 'all') {
     const kind = f.cat.slice(0, 1);
     const name = f.cat.slice(2);
-    all = all.filter(m => kind === 'g' ? m.type === 'gasto' && m.macroCategoria === name : m.type === 'ingreso' && m.tipoIngreso === name);
+    all = all.filter(m => kind === 'g' ? m.type === 'gasto' && m.macroCategoria === name
+      : kind === 'm' ? m.type === 'gasto' && m.medioPago === name
+      : m.type === 'ingreso' && m.tipoIngreso === name);
   }
   if (q) {
     all = all.filter(m => [m.concepto, shortConcept(m.concepto), m.nota, m.subcategoria, m.macroCategoria, m.tipoIngreso]
@@ -1817,8 +1849,8 @@ function computeAlerts() {
   if (pending > 0 && state.data.googleScriptUrl) {
     alerts.push({ level: 'info', icon: 'cloud_off', title: 'Cambios sin sincronizar', text: `${pending} cambio(s) aún no llegan a Google Sheets. Se reintentará al recuperar la conexión.` });
   }
-  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 4) {
-    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v4)', text: 'La nueva versión de apps-script/Code.gs guarda tu Google Sheet en CAD, con la moneda original y la tasa de cada movimiento.' });
+  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 5) {
+    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v5)', text: 'La nueva versión de apps-script/Code.gs guarda tu Google Sheet en CAD, con la moneda original, la tasa y el medio de pago de cada movimiento.' });
   }
   if (state.data.googleScriptUrl && state.data.sheetsProtocol === 1) {
     alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script', text: 'Con el script antiguo, editar o borrar no llega a Google Sheets. Reemplázalo por apps-script/Code.gs para sincronizar en ambos sentidos.' });
@@ -1883,6 +1915,7 @@ function addRecurring(type, item, modo) {
       concepto: item.concepto,
       nota: item.nota,
       moneda: item.moneda === 'CAD' ? 'CAD' : 'COP',
+      medioPago: item.medioPago,
       montoOriginal: item.montoOriginal,
       valor: item.valor
     },
@@ -1923,7 +1956,7 @@ function recurringFields(tpl, monthKey) {
     : { valor: Math.round(Number(d.valor)), moneda: 'COP' };
   const base = { ...money, fecha: recurringDueDate(tpl, monthKey), concepto: d.concepto, nota: d.nota || '', recurrenteId: tpl.id };
   return tpl.type === 'gasto'
-    ? { ...base, macroCategoria: d.macroCategoria, subcategoria: d.subcategoria }
+    ? { ...base, macroCategoria: d.macroCategoria, subcategoria: d.subcategoria, medioPago: d.medioPago }
     : { ...base, tipoIngreso: d.tipoIngreso };
 }
 
@@ -2124,6 +2157,7 @@ function resetForm() {
   form.editing = null;
   form.fromTemplate = null;
   form.moneda = state.data.registroMoneda;
+  form.medio = state.data.registroMedio;
   const amt = document.getElementById('expenseAmountInput');
   const nota = document.getElementById('expenseNote');
   const date = document.getElementById('regDateInput');
@@ -2147,6 +2181,30 @@ function setFormCurrency(currency) {
 }
 
 // Selector de moneda del monto y equivalencia en la otra moneda
+function setFormMedio(medio) {
+  if (!MEDIOS_PAGO[medio]) return;
+  form.medio = medio;
+  // Se recuerda para el próximo gasto
+  state.data.registroMedio = medio;
+  state.save();
+  renderFormMedio();
+}
+
+function renderFormMedio() {
+  const cur = form.medio || state.data.registroMedio;
+  document.querySelectorAll('#medioPagoSegment [data-medio]').forEach(btn => {
+    const active = btn.dataset.medio === cur;
+    btn.classList.toggle('bg-primary', active);
+    btn.classList.toggle('text-on-primary', active);
+    btn.classList.toggle('shadow-xs', active);
+    btn.classList.toggle('text-on-surface-variant', !active);
+    btn.setAttribute('aria-pressed', active);
+  });
+  setText('medioPagoHint', cur === 'credito'
+    ? 'Cuenta como gasto hoy. Al pagar la tarjeta no registres otro gasto: solo los intereses o cargos.'
+    : '');
+}
+
 function renderFormCurrency() {
   const cur = form.moneda || state.data.registroMoneda;
   document.querySelectorAll('#amountCurrencySegment [data-currency]').forEach(btn => {
@@ -2301,6 +2359,7 @@ function renderFormSyncHints() {
     : (hasSheets ? 'Se registrará en la pestaña correspondiente de tu Google Sheet' : 'Se guarda en este dispositivo. Conecta Google Sheets en Ajustes para sincronizar.'));
   setText('syncTargetText', hasSheets ? 'BDGastosApp' : 'este dispositivo');
   renderFormCurrency();
+  renderFormMedio();
   renderFormRecurrence();
 }
 
@@ -2318,6 +2377,7 @@ function startEdit(type, id) {
     form.conceptoIngreso = item.concepto || '';
   }
   form.moneda = item.moneda === 'CAD' ? 'CAD' : 'COP';
+  form.medio = MEDIOS_PAGO[item.medioPago] ? item.medioPago : state.data.registroMedio;
   switchView('registrar');
 
   document.getElementById('expenseAmountInput').value = item.moneda === 'CAD' ? item.montoOriginal : item.valor;
@@ -2337,6 +2397,7 @@ function startFromTemplate(tplId, monthKey) {
   form.type = tpl.type;
   form.fromTemplate = { tplId, monthKey };
   form.moneda = d.moneda === 'CAD' ? 'CAD' : 'COP';
+  form.medio = MEDIOS_PAGO[d.medioPago] ? d.medioPago : state.data.registroMedio;
   if (tpl.type === 'gasto') {
     form.macro = d.macroCategoria;
     form.sub = d.subcategoria;
@@ -2373,7 +2434,7 @@ async function saveForm() {
     : { valor: Math.round(val), moneda: 'COP', montoOriginal: undefined, tasa: undefined };
 
   const fields = form.type === 'gasto'
-    ? { ...money, fecha, macroCategoria: form.macro, subcategoria: form.sub, concepto: document.getElementById('regConceptoSelect')?.value || form.concepto, nota }
+    ? { ...money, fecha, macroCategoria: form.macro, subcategoria: form.sub, concepto: document.getElementById('regConceptoSelect')?.value || form.concepto, nota, medioPago: form.medio }
     : { ...money, fecha, tipoIngreso: form.tipoIngreso, concepto: document.getElementById('regConceptoIngresoSelect')?.value || form.conceptoIngreso, nota };
 
   const label = form.type === 'gasto' ? 'Gasto' : 'Ingreso';
