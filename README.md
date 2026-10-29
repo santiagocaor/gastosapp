@@ -62,7 +62,7 @@ La sincronización es **en ambos sentidos**: lo que crees, edites o borres en la
 
 1. Abre tu hoja **BDGastosApp** → *Extensiones* → *Apps Script*.
 2. **Guarda una copia de tu script actual** (por si acaso) y reemplaza el contenido de `Code.gs` por [`apps-script/Code.gs`](apps-script/Code.gs).
-3. Si tus pestañas no se llaman `Registro de Gastos` y `Registro de Ingresos`, ajusta `CONFIG.SHEETS` al inicio del archivo.
+3. Si tus pestañas no se llaman `Registro de Gastos`, `Registro de Ingresos`, `BDGastos` y `BDIngresos`, ajusta `CONFIG.SHEETS` y `CONFIG.CATALOG` al inicio del archivo.
 4. Publica: *Implementar* → *Administrar implementaciones* → ✏️ editar la implementación actual → *Versión: nueva versión* → *Implementar*. Así la URL no cambia. (Si es la primera vez: *Nueva implementación* → *Aplicación web*, ejecutar como **tú**, acceso **cualquier usuario**.)
 5. En la app abre **Ajustes** (⚙️), pega la URL y pulsa *Guardar y verificar*. Debe decir “Sincronización completa”.
 
@@ -70,12 +70,16 @@ Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del sc
 
 ### Cómo funciona
 
+- **Funciona con Tablas de Google Sheets** (o rangos normales): cada columna se ubica por su encabezado en la fila 1 (acepta variantes como “Concepto de Gasto” o “Macro-categoría”), así que puedes reordenarlas o agregar otras. Los registros nuevos van en la primera fila vacía de la Tabla.
+- **Tus categorías salen de la hoja:** la app lee **BDGastos** (Macro-categoría · Subcategoría · Concepto) y **BDIngresos** (Tipo de ingreso · Concepto). Lo que agregues o borres ahí aparece en la app al sincronizar; las macro-categorías nuevas reciben su ícono y color. El botón *+ Concepto* de la app también agrega la fila a BDGastos.
+- **Listas desplegables:** si la hoja rechaza un valor (por ejemplo una categoría que borraste), la fila no queda a medias, el registro queda marcado en rojo y la campana dice qué valor y en qué columna; al editarlo a uno válido se envía.
+
 - **Tarjeta de crédito:** cada compra con la TC se registra como gasto en su categoría el día de la compra, con medio de pago *Tarjeta de crédito*. El pago de la tarjeta a fin de mes **no** es un gasto (solo mueve dinero de la cuenta a la tarjeta); en *Deudas → Tarjetas de crédito → Intereses y cargos TC* registra solo intereses, cuota de manejo o cargos del banco. En *Movimientos* filtra por “Tarjeta de crédito” para ver cuánto llevas cargado.
 - **La hoja está en CAD.** La columna **Valor (CAD)** guarda el monto en dólares canadienses; al final de cada pestaña se agregan **ID**, **Moneda** (en qué moneda se registró), **Monto original** (en esa moneda), **Tasa CAD→COP** y **Medio de pago** (se buscan por encabezado, así que puedes moverlas).
 - **Migración automática (una vez):** al sincronizar por primera vez con el script v4, las filas que estaban en COP se convierten a CAD con la tasa del día; su monto exacto en COP queda en *Monto original*. Las registradas en CAD recuperan su monto original exacto.
 - **Puedes editar la hoja a mano:** *Valor (CAD)* manda. Si lo cambias, la app ajusta el monto original; una fila nueva escrita a mano se toma como CAD y recibe su id.
 - Hacia la app el script entrega el valor en COP y en CAD, así una versión vieja de la app abierta en otro dispositivo no muestra cifras erradas.
-- Con un script anterior la app sigue funcionando (conserva la moneda y el medio de pago en el dispositivo), pero avisa para actualizarlo a la v5.
+- Con un script anterior la app sigue funcionando con su catálogo propio (y conserva moneda y medio de pago en el dispositivo), pero avisa para actualizarlo a la v6.
 - La app envía `POST` con JSON en `text/plain` (sin preflight CORS), lee la respuesta y solo marca un cambio como enviado cuando el script confirma `ok`.
 - Sin conexión, los cambios quedan **pendientes** (☁️ tachado) y se envían solos al volver la red o al abrir la app; también con *Reenviar pendientes*.
 - La app se sincroniza sola al abrirse y al volver a ella (como máximo cada 2 minutos), o con *Sincronizar ahora*.
@@ -83,7 +87,7 @@ Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del sc
 - *Vaciar registros* solo borra los datos del dispositivo; la hoja no se toca.
 - Con el **script antiguo** la app sigue funcionando en modo compatible (solo envía registros nuevos) y muestra un aviso para actualizarlo.
 
-Acciones del script (`POST`): `ping`, `list`, `upsert` (crea o actualiza por `id`), `delete`. El `GET` sin clave devuelve el listado.
+Acciones del script (`POST`): `ping`, `list` (registros + catálogo), `catalog`, `addCatalog`, `upsert` (crea o actualiza por `id`), `delete`. El `GET` sin clave devuelve el listado.
 
 ---
 

@@ -311,12 +311,57 @@ function shortConcept(c) {
   return SHORT_CONCEPTS[c] || c || '';
 }
 
-// Catálogo de gastos: el de Sheets + lo que se haya añadido desde la app
+// Ícono y color de cada macro-categoría (las nuevas reciben uno estable según su nombre)
+const MACRO_STYLES = {
+  "Necesidades": { icon: "health_and_safety", color: "#006c49" },
+  "Deseos": { icon: "celebration", color: "#4edea3" },
+  "Deudas": { icon: "credit_card", color: "#ba1a1a" },
+  "Ahorros": { icon: "savings", color: "#004f35" },
+  "Inversiones": { icon: "trending_up", color: "#1d4ed8" }
+};
+const EXTRA_COLORS = ['#c2410c', '#7c3aed', '#ca8a04', '#be185d', '#0b7285', '#15803d', '#475569'];
+const INGRESO_ICONS = { "Laboral": "work", "Gubernamental": "account_balance", "Capacitación / Subsidio": "school", "Servicios Profesionales": "support_agent" };
+
+function hashText(s) {
+  let h = 0;
+  for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h;
+}
+
+function macroConf(macro) {
+  return MACRO_STYLES[macro] || { icon: 'category', color: EXTRA_COLORS[hashText(macro) % EXTRA_COLORS.length] };
+}
+
+// Estructura base { macro: { subcategoría: [conceptos] } } de la hoja o de la app
+function baseGastoCatalog() {
+  const fromSheet = state.data.catalogoSheets && state.data.catalogoSheets.gasto;
+  if (fromSheet && Object.keys(fromSheet).length) return fromSheet;
+  const out = {};
+  Object.entries(BD_GASTOS).forEach(([macro, conf]) => { out[macro] = conf.subcategorias; });
+  return out;
+}
+
+// Tipos de ingreso → { icon, conceptos }
+function ingresoCatalog() {
+  const fromSheet = state.data.catalogoSheets && state.data.catalogoSheets.ingreso;
+  if (fromSheet && Object.keys(fromSheet).length) {
+    const out = {};
+    Object.entries(fromSheet).forEach(([tipo, conceptos]) => { out[tipo] = { icon: INGRESO_ICONS[tipo] || 'payments', conceptos: [...conceptos] }; });
+    return out;
+  }
+  return BD_INGRESOS;
+}
+
+function macroList() {
+  return Object.keys(getCategorias());
+}
+
+// Catálogo de gastos: el de la hoja (o el de la app) + lo que se haya añadido desde la app
 function getCategorias() {
   const merged = {};
-  Object.entries(BD_GASTOS).forEach(([macro, conf]) => {
-    merged[macro] = { ...conf, subcategorias: {} };
-    Object.entries(conf.subcategorias).forEach(([sub, list]) => {
+  Object.entries(baseGastoCatalog()).forEach(([macro, subs]) => {
+    merged[macro] = { ...macroConf(macro), subcategorias: {} };
+    Object.entries(subs).forEach(([sub, list]) => {
       merged[macro].subcategorias[sub] = [...list];
     });
   });
@@ -468,7 +513,7 @@ class AppState {
 
   macroTotals(gastos) {
     const totals = {};
-    Object.keys(BD_GASTOS).forEach(macro => { totals[macro] = 0; });
+    macroList().forEach(macro => { totals[macro] = 0; });
     gastos.forEach(g => {
       if (totals[g.macroCategoria] !== undefined) totals[g.macroCategoria] += itemCOP(g);
     });
@@ -483,7 +528,8 @@ class AppState {
   }
 
   getGlobalBudget() {
-    return Object.keys(this.data.presupuestos).reduce((a, macro) => a + this.budgetCOP(macro), 0);
+    // Solo las macro-categorías vigentes (las borradas del catálogo no cuentan)
+    return macroList().reduce((a, macro) => a + this.budgetCOP(macro), 0);
   }
 
   // Guarda un límite escrito en la moneda que se está mostrando. Si esa moneda no es la de
@@ -598,11 +644,21 @@ class AppState {
   }
 
   async syncItem(type, item) {
-    const ok = this.isFullSync()
-      ? (await this.callSheets({ action: 'upsert', ...this.payload(type, item) })).ok
-      : await this.legacyPost(this.payload(type, item));
+    let ok;
+    if (this.isFullSync()) {
+      const r = await this.callSheets({ action: 'upsert', ...this.payload(type, item) });
+      ok = r.ok === true;
+      // La hoja respondió pero rechazó el registro (p. ej. una lista desplegable): se guarda el motivo
+      if (!ok && !r.network) {
+        item.syncError = r.error || 'La hoja rechazó el registro';
+        this.save();
+      }
+    } else {
+      ok = await this.legacyPost(this.payload(type, item));
+    }
     if (ok) {
       item.synced = true;
+      delete item.syncError;
       if (this.isFullSync()) item.remote = true;
       this.save();
     }
@@ -755,6 +811,11 @@ class AppState {
           // Filas de encabezado del script antiguo
           if (Array.isArray(remote.gastos)) remote.gastos = remote.gastos.slice(1).filter(r => r[0] && r[1]);
           if (Array.isArray(remote.ingresos)) remote.ingresos = remote.ingresos.slice(1).filter(r => r[0] && r[1]);
+        }
+
+        // Script v6: catálogo de la hoja (BDGastos / BDIngresos)
+        if (remote.catalog && (remote.catalog.gasto || remote.catalog.ingreso)) {
+          this.data.catalogoSheets = { gasto: remote.catalog.gasto || null, ingreso: remote.catalog.ingreso || null, actualizado: Date.now() };
         }
 
         const deleted = new Set(this.data.pendingDeletes.map(d => `${d.type}:${d.id}`));
@@ -1222,10 +1283,10 @@ function renderDashboard() {
     const macroTotals = state.macroTotals(state.gastosEntre(...state.monthBounds(key)));
     const totalSpent = totalGastos || 1;
 
-    chips.innerHTML = Object.keys(BD_GASTOS).map(macro => {
+    chips.innerHTML = macroList().map(macro => {
       const spent = macroTotals[macro] || 0;
       const percent = Math.round((spent / totalSpent) * 100);
-      const conf = BD_GASTOS[macro];
+      const conf = macroConf(macro);
 
       return `
         <button type="button" data-action="goto" data-view="presupuestos" class="flex items-center gap-2.5 p-2.5 pr-3.5 bg-surface-container-lowest rounded-xl shadow-xs shrink-0 min-w-[155px] text-left hover:bg-surface-container-low transition-all active:scale-95">
@@ -1249,11 +1310,13 @@ function movementRow(m) {
   const isGasto = m.type === 'gasto';
   const sign = isGasto ? '-' : '+';
   const color = isGasto ? 'text-on-surface font-semibold' : 'text-secondary font-bold';
-  const icon = isGasto ? (BD_GASTOS[m.macroCategoria]?.icon || 'trending_down') : (BD_INGRESOS[m.tipoIngreso]?.icon || 'trending_up');
+  const icon = isGasto ? macroConf(m.macroCategoria).icon : (ingresoCatalog()[m.tipoIngreso]?.icon || INGRESO_ICONS[m.tipoIngreso] || 'trending_up');
   const title = escapeHtml(shortConcept(m.concepto) || (isGasto ? m.subcategoria : m.tipoIngreso));
   const subtitle = escapeHtml(isGasto ? `${m.macroCategoria} › ${m.subcategoria}` : `Ingreso › ${m.tipoIngreso}`);
   const pending = m.synced === false && state.data.googleScriptUrl
-    ? `<span class="material-symbols-outlined text-[14px] text-outline align-middle" title="Pendiente de enviar a Google Sheets">cloud_off</span>`
+    ? (m.syncError
+      ? `<span class="material-symbols-outlined text-[14px] text-error align-middle" title="${escapeHtml(m.syncError)}">sync_problem</span>`
+      : `<span class="material-symbols-outlined text-[14px] text-outline align-middle" title="Pendiente de enviar a Google Sheets">cloud_off</span>`)
     : '';
   const medio = isGasto && MEDIOS_PAGO[m.medioPago]
     ? `<span class="material-symbols-outlined text-[14px] text-outline align-middle" title="${MEDIOS_PAGO[m.medioPago].label}">${MEDIOS_PAGO[m.medioPago].icon}</span>`
@@ -1329,12 +1392,24 @@ function initMovementsFilters() {
   q?.addEventListener('input', () => { ui.mov.q = q.value; renderMovementsView(); });
   const cat = document.getElementById('movCategory');
   if (cat) {
-    cat.innerHTML = `<option value="all">Todas las categorías</option>
-      <optgroup label="Gastos">${Object.keys(BD_GASTOS).map(m => `<option value="g:${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</optgroup>
-      <optgroup label="Ingresos">${Object.keys(BD_INGRESOS).map(t => `<option value="i:${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}</optgroup>
-      <optgroup label="Gastos por medio de pago">${Object.entries(MEDIOS_PAGO).map(([k, v]) => `<option value="m:${k}">${escapeHtml(v.label)}</option>`).join('')}</optgroup>`;
+    fillMovementCategories();
     cat.addEventListener('change', () => { ui.mov.cat = cat.value; renderMovementsView(); });
   }
+}
+
+// Opciones del filtro de categorías; se regeneran si cambia el catálogo (p. ej. al sincronizar)
+function fillMovementCategories() {
+  const cat = document.getElementById('movCategory');
+  if (!cat) return;
+  const sig = JSON.stringify([macroList(), Object.keys(ingresoCatalog())]);
+  if (cat.dataset.sig === sig) return;
+  cat.dataset.sig = sig;
+  cat.innerHTML = `<option value="all">Todas las categorías</option>
+      <optgroup label="Gastos">${macroList().map(m => `<option value="g:${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</optgroup>
+      <optgroup label="Ingresos">${Object.keys(ingresoCatalog()).map(t => `<option value="i:${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}</optgroup>
+      <optgroup label="Gastos por medio de pago">${Object.entries(MEDIOS_PAGO).map(([k, v]) => `<option value="m:${k}">${escapeHtml(v.label)}</option>`).join('')}</optgroup>`;
+  cat.value = [...cat.options].some(o => o.value === ui.mov.cat) ? ui.mov.cat : 'all';
+  ui.mov.cat = cat.value;
 }
 
 function setPillState(selector, key, value) {
@@ -1350,6 +1425,7 @@ function setPillState(selector, key, value) {
 function renderMovementsView() {
   const list = document.getElementById('movList');
   if (!list) return;
+  fillMovementCategories();
   const f = ui.mov;
 
   setPillState('#movTypePills [data-type]', 'type', f.type);
@@ -1501,12 +1577,7 @@ function useConcept(macro, sub, concepto) {
 
 function removeCustomConcept(macro, sub, concepto) {
   if (!confirm(`¿Quitar el concepto "${concepto}" de ${sub}?\nLos registros existentes no se modifican.`)) return;
-  const subs = state.data.customCategorias[macro];
-  if (!subs || !subs[sub]) return;
-  subs[sub] = subs[sub].filter(c => c !== concepto);
-  if (subs[sub].length === 0) delete subs[sub];
-  if (Object.keys(subs).length === 0) delete state.data.customCategorias[macro];
-  state.save();
+  removeLocalConcept(macro, sub, concepto);
   renderAll();
   renderFormSelectors();
   showToast('Concepto eliminado');
@@ -1515,7 +1586,7 @@ function removeCustomConcept(macro, sub, concepto) {
 function openCategoryModal() {
   const macroSel = document.getElementById('newCatMacro');
   if (macroSel) {
-    macroSel.innerHTML = Object.keys(BD_GASTOS).map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    macroSel.innerHTML = macroList().map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
     macroSel.value = form.macro;
   }
   updateCategorySubOptions();
@@ -1538,7 +1609,7 @@ function saveNewCategory() {
   const macro = document.getElementById('newCatMacro')?.value;
   const sub = (document.getElementById('newCatSub')?.value || '').trim().slice(0, 60);
   const concepto = (document.getElementById('newCatConcept')?.value || '').trim().slice(0, 80);
-  if (!BD_GASTOS[macro] || !sub || !concepto) {
+  if (!getCategorias()[macro] || !sub || !concepto) {
     showToast('Completa la subcategoría y el concepto', 'error');
     return;
   }
@@ -1547,6 +1618,7 @@ function saveNewCategory() {
     showToast('Ese concepto ya existe en esa subcategoría', 'error');
     return;
   }
+  // Se guarda en la app de inmediato; con el script v6 también se agrega a BDGastos
   const subs = state.data.customCategorias[macro] || (state.data.customCategorias[macro] = {});
   (subs[sub] || (subs[sub] = [])).push(concepto);
   state.save();
@@ -1558,7 +1630,36 @@ function saveNewCategory() {
   closeModal('categoryModal');
   renderAll();
   renderFormSelectors();
-  showToast(`Concepto "${concepto}" añadido a ${sub}`);
+
+  if (state.isFullSync() && state.data.sheetsVersion >= 6) {
+    state.callSheets({ action: 'addCatalog', type: 'gasto', macro, sub, concepto }).then(r => {
+      if (r.ok) {
+        // Ya está en la hoja: pasa al catálogo de la hoja y deja de ser un concepto local
+        const cat = state.data.catalogoSheets && state.data.catalogoSheets.gasto;
+        if (cat) {
+          cat[macro] = cat[macro] || {};
+          cat[macro][sub] = cat[macro][sub] || [];
+          if (!cat[macro][sub].includes(concepto)) cat[macro][sub].push(concepto);
+        }
+        removeLocalConcept(macro, sub, concepto);
+        renderAll();
+        showToast(`Concepto "${concepto}" añadido a ${sub} y a BDGastos`);
+      } else {
+        showToast(`"${concepto}" quedó solo en la app: ${r.error || 'no se pudo agregar a BDGastos'}`, 'error');
+      }
+    });
+  } else {
+    showToast(`Concepto "${concepto}" añadido a ${sub}`);
+  }
+}
+
+function removeLocalConcept(macro, sub, concepto) {
+  const subs = state.data.customCategorias[macro];
+  if (!subs || !subs[sub]) return;
+  subs[sub] = subs[sub].filter(c => c !== concepto);
+  if (subs[sub].length === 0) delete subs[sub];
+  if (Object.keys(subs).length === 0) delete state.data.customCategorias[macro];
+  state.save();
 }
 
 // --------------------------------------------------------
@@ -1588,7 +1689,7 @@ function renderBudgetsView() {
   const categorias = getCategorias();
   const q = normalizeText(ui.categorySearch.trim());
 
-  const cards = Object.keys(BD_GASTOS).map(macro => {
+  const cards = Object.keys(categorias).map(macro => {
     const conf = categorias[macro];
     const subs = filteredSubcategories(macro, conf, q);
     if (!subs) return '';
@@ -1732,7 +1833,7 @@ function renderStatisticsView() {
   const circumference = 2 * Math.PI * 62;
   const donutSvg = document.getElementById('donutSvgContainer');
   const donutLegend = document.getElementById('donutLegendContainer');
-  const macros = Object.keys(BD_GASTOS).filter(m => (macroTotals[m] || 0) > 0);
+  const macros = macroList().filter(m => (macroTotals[m] || 0) > 0);
   setText('donutCenterTotal', state.formatMoney(totalGastos));
 
   if (donutSvg) {
@@ -1741,7 +1842,7 @@ function renderStatisticsView() {
     macros.forEach(macro => {
       const len = (macroTotals[macro] / totalSpent) * circumference;
       circlesHtml += `
-        <circle cx="80" cy="80" fill="none" r="62" stroke="${BD_GASTOS[macro].color}"
+        <circle cx="80" cy="80" fill="none" r="62" stroke="${macroConf(macro).color}"
           stroke-dasharray="${len.toFixed(1)} ${(circumference - len).toFixed(1)}"
           stroke-dashoffset="-${accOffset.toFixed(1)}" stroke-width="20">
           <title>${escapeHtml(macro)}: ${state.formatMoney(macroTotals[macro])}</title>
@@ -1760,7 +1861,7 @@ function renderStatisticsView() {
         return `
           <div class="flex items-center justify-between p-2 rounded-lg hover:bg-surface-container-low transition-colors">
             <div class="flex items-center gap-space-sm">
-              <div class="w-3.5 h-3.5 rounded-full" style="background-color: ${BD_GASTOS[macro].color}"></div>
+              <div class="w-3.5 h-3.5 rounded-full" style="background-color: ${macroConf(macro).color}"></div>
               <span class="font-body-md text-on-surface font-medium">${escapeHtml(macro)}</span>
             </div>
             <div class="flex items-center gap-3">
@@ -1817,7 +1918,7 @@ function renderTopConcepts(gastos, totalSpent) {
         </div>
         <div class="flex items-center gap-2">
           <div class="flex-1 h-1.5 rounded-full bg-surface-container-high overflow-hidden">
-            <div class="h-full rounded-full" style="width: ${(v.amt / totalSpent) * 100}%; background-color: ${BD_GASTOS[v.macro]?.color || '#006c49'}"></div>
+            <div class="h-full rounded-full" style="width: ${(v.amt / totalSpent) * 100}%; background-color: ${macroConf(v.macro).color}"></div>
           </div>
           <span class="text-[11px] text-on-surface-variant shrink-0">${v.n} mov.</span>
         </div>
@@ -1833,7 +1934,7 @@ function computeAlerts() {
   const macroTotals = state.macroTotals(state.gastosEntre(...state.monthBounds(key)));
   const alerts = [];
 
-  Object.keys(BD_GASTOS).forEach(macro => {
+  macroList().forEach(macro => {
     const limit = state.budgetCOP(macro);
     if (limit <= 0) return;
     const spent = macroTotals[macro] || 0;
@@ -1846,11 +1947,16 @@ function computeAlerts() {
   });
 
   const pending = state.pendingCount();
-  if (pending > 0 && state.data.googleScriptUrl) {
-    alerts.push({ level: 'info', icon: 'cloud_off', title: 'Cambios sin sincronizar', text: `${pending} cambio(s) aún no llegan a Google Sheets. Se reintentará al recuperar la conexión.` });
+  const rejected = state.getPending().filter(p => p.item.syncError);
+  if (rejected.length > 0 && state.data.googleScriptUrl) {
+    const first = rejected[0].item;
+    alerts.push({ level: 'error', icon: 'sync_problem', title: `Google Sheets rechazó ${rejected.length} registro(s)`, text: `${shortConcept(first.concepto)} (${formatDisplayDate(first.fecha)}): ${first.syncError} Edítalo para corregirlo.` });
   }
-  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 5) {
-    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v5)', text: 'La nueva versión de apps-script/Code.gs guarda tu Google Sheet en CAD, con la moneda original, la tasa y el medio de pago de cada movimiento.' });
+  if (pending - rejected.length > 0 && state.data.googleScriptUrl) {
+    alerts.push({ level: 'info', icon: 'cloud_off', title: 'Cambios sin sincronizar', text: `${pending - rejected.length} cambio(s) aún no llegan a Google Sheets. Se reintentará al recuperar la conexión.` });
+  }
+  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 6) {
+    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v6)', text: 'La nueva versión de apps-script/Code.gs funciona con Tablas de Google Sheets, lee tus categorías de BDGastos/BDIngresos y guarda moneda, tasa y medio de pago.' });
   }
   if (state.data.googleScriptUrl && state.data.sheetsProtocol === 1) {
     alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script', text: 'Con el script antiguo, editar o borrar no llega a Google Sheets. Reemplázalo por apps-script/Code.gs para sincronizar en ambos sentidos.' });
@@ -2007,7 +2113,7 @@ function recurringAmountText(tpl) {
 }
 
 function recurringIcon(tpl) {
-  return tpl.type === 'gasto' ? (BD_GASTOS[tpl.datos.macroCategoria]?.icon || 'event_repeat') : (BD_INGRESOS[tpl.datos.tipoIngreso]?.icon || 'event_repeat');
+  return tpl.type === 'gasto' ? macroConf(tpl.datos.macroCategoria).icon : (ingresoCatalog()[tpl.datos.tipoIngreso]?.icon || 'event_repeat');
 }
 
 function renderRecurringCard() {
@@ -2323,21 +2429,22 @@ function renderFormSelectors() {
   }
 
   // Tipos de ingreso
-  if (!BD_INGRESOS[form.tipoIngreso]) form.tipoIngreso = Object.keys(BD_INGRESOS)[0];
+  const ingresos = ingresoCatalog();
+  if (!ingresos[form.tipoIngreso]) form.tipoIngreso = Object.keys(ingresos)[0];
   const tipoGrid = document.getElementById('regTipoIngresoGrid');
   if (tipoGrid) {
-    tipoGrid.innerHTML = Object.keys(BD_INGRESOS).map(tipo => {
+    tipoGrid.innerHTML = Object.keys(ingresos).map(tipo => {
       const isSel = tipo === form.tipoIngreso;
       return `
         <button class="p-2.5 rounded-xl flex flex-col items-center justify-center transition-all ${isSel ? 'bg-secondary/15 ring-2 ring-secondary font-bold text-primary' : 'bg-surface-container text-on-surface-variant'}" type="button" data-action="select-tipo" data-tipo="${escapeHtml(tipo)}" aria-pressed="${isSel}">
-          <span class="material-symbols-outlined text-[22px] mb-1">${BD_INGRESOS[tipo].icon}</span>
+          <span class="material-symbols-outlined text-[22px] mb-1">${ingresos[tipo].icon}</span>
           <span class="text-label-md text-center truncate w-full">${escapeHtml(tipo)}</span>
         </button>
       `;
     }).join('');
   }
 
-  const conceptosIng = [...BD_INGRESOS[form.tipoIngreso].conceptos];
+  const conceptosIng = [...(ingresos[form.tipoIngreso]?.conceptos || [])];
   if (form.conceptoIngreso && !conceptosIng.includes(form.conceptoIngreso)) conceptosIng.unshift(form.conceptoIngreso);
   if (!form.conceptoIngreso) form.conceptoIngreso = conceptosIng[0] || '';
   const selectIng = document.getElementById('regConceptoIngresoSelect');
