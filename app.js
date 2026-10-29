@@ -96,79 +96,9 @@ const DEFAULT_STATE = {
   googleScriptUrl: '', // URL del Webhook de Google Apps Script
   presupuestos: { ...PRESUPUESTOS_DEFAULT },
   
-  // Registros reales de la hoja "Registro de Gastos"
-  gastos: [
-    {
-      id: "tx_g1",
-      fecha: "2026-10-28",
-      valor: 1500000,
-      macroCategoria: "Necesidades",
-      subcategoria: "Vivienda",
-      concepto: "Alquiler de vivienda",
-      nota: "Pago mensual de arriendo",
-      displayDate: "28 Oct 2026"
-    },
-    {
-      id: "tx_g2",
-      fecha: "2026-10-28",
-      valor: 180000,
-      macroCategoria: "Necesidades",
-      subcategoria: "Alimentación",
-      concepto: "Supermercado",
-      nota: "Compras de víveres del mes",
-      displayDate: "28 Oct 2026"
-    },
-    {
-      id: "tx_g3",
-      fecha: "2026-10-29",
-      valor: 55000,
-      macroCategoria: "Deseos",
-      subcategoria: "Entretenimiento",
-      concepto: "Salidas a restaurantes, cafeterías y bares",
-      nota: "Cena familiar fin de semana",
-      displayDate: "29 Oct 2026"
-    }
-  ],
-
-  // Registros reales de la hoja "Registro de Ingresos"
-  ingresos: [
-    {
-      id: "tx_i1",
-      fecha: "2026-10-28",
-      valor: 3500000,
-      tipoIngreso: "Laboral",
-      concepto: "Nómina Santiago",
-      nota: "Salario mensual",
-      displayDate: "28 Oct 2026"
-    },
-    {
-      id: "tx_i2",
-      fecha: "2026-10-28",
-      valor: 2800000,
-      tipoIngreso: "Laboral",
-      concepto: "Nómina Lina",
-      nota: "Salario quincenal",
-      displayDate: "28 Oct 2026"
-    },
-    {
-      id: "tx_i3",
-      fecha: "2026-10-29",
-      valor: 450000,
-      tipoIngreso: "Gubernamental",
-      concepto: "Ayuda de gobierno",
-      nota: "Subsidio familiar",
-      displayDate: "29 Oct 2026"
-    },
-    {
-      id: "tx_i4",
-      fecha: "2026-10-30",
-      valor: 200000,
-      tipoIngreso: "Capacitación / Subsidio",
-      concepto: "Francisation",
-      nota: "Asignación por estudio",
-      displayDate: "30 Oct 2026"
-    }
-  ]
+  // Registros iniciales vacíos para empezar desde cero
+  gastos: [],
+  ingresos: []
 };
 
 class AppState {
@@ -181,11 +111,11 @@ class AppState {
       const saved = localStorage.getItem('gastosapp_sheets_state');
       if (saved) {
         this.data = JSON.parse(saved);
-        if (!this.data.gastos || this.data.gastos.length === 0) {
-          this.data.gastos = [...DEFAULT_STATE.gastos];
+        if (!Array.isArray(this.data.gastos)) {
+          this.data.gastos = [];
         }
-        if (!this.data.ingresos || this.data.ingresos.length === 0) {
-          this.data.ingresos = [...DEFAULT_STATE.ingresos];
+        if (!Array.isArray(this.data.ingresos)) {
+          this.data.ingresos = [];
         }
         if (!this.data.presupuestos) {
           this.data.presupuestos = { ...PRESUPUESTOS_DEFAULT };
@@ -961,6 +891,14 @@ function initSheetsConfigModal() {
     });
   }
 
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.remove('open');
+      }
+    });
+  }
+
   if (saveBtn) {
     saveBtn.addEventListener('click', () => {
       if (input) {
@@ -983,3 +921,26 @@ function showToast(message) {
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3500);
 }
+
+window.openSheetsConfigModal = function() {
+  const modal = document.getElementById('sheetsConfigModal');
+  const input = document.getElementById('googleScriptUrlInput');
+  if (input) input.value = state.data.googleScriptUrl || '';
+  if (modal) modal.classList.add('open');
+};
+
+window.closeSheetsConfigModal = function() {
+  const modal = document.getElementById('sheetsConfigModal');
+  if (modal) modal.classList.remove('open');
+};
+
+window.confirmResetAll = function() {
+  if (confirm('¿Deseas vaciar todos los gastos e ingresos registrados para empezar desde cero? Tu balance quedará en $0.')) {
+    state.clearAllMovements();
+    renderAll();
+    const modal = document.getElementById('sheetsConfigModal');
+    if (modal) modal.classList.remove('open');
+    showToast('Registros vaciados: balance en $0');
+  }
+};
+

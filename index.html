@@ -142,7 +142,7 @@
 
         <div class="flex items-center gap-space-xs shrink-0">
           <!-- Google Sheets Sync Config Button -->
-          <button id="openSheetsConfigBtn" aria-label="Sincronizar Google Sheets" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-secondary hover:bg-surface-container-low transition-colors" type="button" title="Configurar Google Sheets">
+          <button id="openSheetsConfigBtn" onclick="openSheetsConfigModal()" aria-label="Sincronizar Google Sheets" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-secondary hover:bg-surface-container-low transition-colors" type="button" title="Configurar Google Sheets">
             <span class="material-symbols-outlined text-[22px]">table_chart</span>
           </button>
 
@@ -304,11 +304,17 @@
 
         <!-- Recent Movements List -->
         <div class="space-y-space-sm pb-space-sm">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <h2 class="text-headline-sm text-on-surface">Movimientos Recientes</h2>
-            <button class="text-label-md text-secondary font-semibold hover:underline" onclick="switchView('estadisticas')">
-              Ver estadísticas
-            </button>
+            <div class="flex items-center gap-2">
+              <button class="px-2.5 py-1 bg-error-container/80 text-error hover:bg-error-container rounded-lg text-label-md flex items-center gap-1 font-semibold cursor-pointer transition-colors" type="button" onclick="confirmResetAll()" title="Vaciar todos los registros para empezar desde cero">
+                <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
+                Vaciar registros (Empezar desde cero)
+              </button>
+              <button class="text-label-md text-secondary font-semibold hover:underline px-1" onclick="switchView('estadisticas')">
+                Estadísticas
+              </button>
+            </div>
           </div>
 
           <div id="recentTransactionsList" class="space-y-2">
@@ -691,6 +697,8 @@
           </div>
         </div>
       </div>
+    </div>
+
     <!-- Modal de Configuración de Google Sheets -->
     <div id="sheetsConfigModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
       <div class="w-full max-w-sm bg-surface-container-lowest rounded-2xl p-space-lg shadow-2xl space-y-space-md border border-slate-200">
@@ -699,7 +707,7 @@
             <span class="material-symbols-outlined text-[24px]">table_chart</span>
             <h3 class="font-headline-sm text-on-surface">Conectar Google Sheets</h3>
           </div>
-          <button id="closeSheetsConfigBtn" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant" type="button">
+          <button id="closeSheetsConfigBtn" onclick="closeSheetsConfigModal()" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
@@ -711,19 +719,19 @@
           <input id="googleScriptUrlInput" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-sm border border-slate-200 outline-none focus:ring-2 focus:ring-secondary" placeholder="https://script.google.com/macros/s/.../exec" type="url"/>
         </div>
         <div class="pt-2 flex flex-col gap-2">
-          <button id="saveSheetsUrlBtn" class="w-full h-11 bg-primary hover:bg-tertiary text-on-primary rounded-xl font-label-lg font-semibold shadow-xs transition-colors flex items-center justify-center gap-1.5" type="button">
+          <button id="saveSheetsUrlBtn" class="w-full h-11 bg-primary hover:bg-tertiary text-on-primary rounded-xl font-label-lg font-semibold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">save</span>
             Guardar URL
           </button>
           
-          <button id="reloadFromSheetsBtn" class="w-full h-10 bg-secondary-container text-on-secondary-container hover:bg-secondary-fixed rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5" type="button">
+          <button id="reloadFromSheetsBtn" class="w-full h-10 bg-secondary-container text-on-secondary-container hover:bg-secondary-fixed rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">sync</span>
             Cargar / Sincronizar desde Google Sheets
           </button>
 
           <hr class="border-slate-200 my-1"/>
 
-          <button id="resetLocalDataBtn" class="w-full h-10 bg-error-container text-on-error-container hover:bg-error/20 rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5" type="button">
+          <button id="resetLocalDataBtn" onclick="confirmResetAll()" class="w-full h-10 bg-error-container text-on-error-container hover:bg-error/20 rounded-xl font-label-md font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">delete_sweep</span>
             Vaciar registros (Empezar desde cero)
           </button>
