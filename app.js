@@ -944,3 +944,13 @@ window.confirmResetAll = function() {
   }
 };
 
+window.setTransactionType = function(type) {
+  const typeButtons = document.querySelectorAll('#typeSegment button');
+  typeButtons.forEach(btn => {
+    if (btn.getAttribute('data-type') === type) {
+      btn.click();
+    }
+  });
+};
+
+

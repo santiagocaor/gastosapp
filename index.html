@@ -251,42 +251,20 @@
         </div>
 
         <!-- Quick Action Buttons -->
-        <div class="grid grid-cols-3 gap-space-sm">
-          <button data-goto="registrar" class="group flex flex-col items-center justify-center p-3 rounded-xl bg-primary text-on-primary shadow-md active:scale-95 transition-all text-center" type="button">
+        <div class="grid grid-cols-2 gap-space-sm">
+          <button onclick="switchView('registrar'); setTransactionType('gasto');" class="group flex flex-col items-center justify-center p-3 rounded-xl bg-primary text-on-primary shadow-sm active:scale-95 transition-all text-center hover:bg-tertiary cursor-pointer" type="button">
             <div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center mb-1.5 shadow-sm group-hover:scale-105 transition-transform">
               <span class="material-symbols-outlined text-[22px]">add</span>
             </div>
             <span class="text-label-md font-semibold leading-tight">Añadir Gasto</span>
           </button>
 
-          <button data-goto="registrar" class="group flex flex-col items-center justify-center p-3 rounded-xl bg-surface-container-lowest text-on-surface shadow-xs active:scale-95 transition-all text-center hover:bg-surface-container-low" type="button">
+          <button onclick="switchView('registrar'); setTransactionType('ingreso');" class="group flex flex-col items-center justify-center p-3 rounded-xl bg-surface-container-lowest text-on-surface border border-slate-100 shadow-xs active:scale-95 transition-all text-center hover:bg-surface-container-low cursor-pointer" type="button">
             <div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform">
               <span class="material-symbols-outlined text-on-secondary-container text-[20px]">payments</span>
             </div>
             <span class="text-label-md font-semibold leading-tight">Añadir Ingreso</span>
           </button>
-
-          <button onclick="alert('📸 Abre la cámara para capturar y escanear el ticket automáticamente mediante OCR.');" class="group flex flex-col items-center justify-center p-3 rounded-xl bg-surface-container-lowest text-on-surface shadow-xs active:scale-95 transition-all text-center hover:bg-surface-container-low" type="button">
-            <div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform">
-              <span class="material-symbols-outlined text-primary text-[20px]">document_scanner</span>
-            </div>
-            <span class="text-label-md font-semibold leading-tight">Escanear Recibo</span>
-          </button>
-        </div>
-
-        <!-- Visual Delight & Insights Highlight -->
-        <div class="p-3.5 bg-surface-container-lowest rounded-xl shadow-xs flex items-center gap-space-md border border-slate-100">
-          <div class="relative w-14 h-14 rounded-lg overflow-hidden shrink-0 shadow-inner bg-secondary-container/30 flex items-center justify-center">
-            <span class="material-symbols-outlined text-3xl text-secondary">potted_plant</span>
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-1 text-secondary text-label-md font-semibold">
-              <span class="material-symbols-outlined text-[16px]">eco</span>
-              <span>Hábito del Día</span>
-            </div>
-            <p class="text-body-sm text-on-surface-variant line-clamp-2 mt-0.5">¡Gran control! Llevas 4 días consecutivos por debajo de tu límite presupuestario diario.</p>
-          </div>
-          <span class="material-symbols-outlined text-on-surface-variant/40 shrink-0 text-[18px]">chevron_right</span>
         </div>
 
         <!-- Category Breakdown Chips Carousel -->
