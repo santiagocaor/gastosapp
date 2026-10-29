@@ -126,7 +126,7 @@
   <link rel="stylesheet" href="styles.css"/>
 </head>
 
-<body class="bg-slate-100 text-on-surface antialiased flex flex-col min-h-screen items-center justify-start select-none">
+<body class="bg-slate-100 text-on-surface antialiased flex flex-col min-h-screen items-center justify-start">
 
   <!-- Desktop Backdrop Container (Mobile Viewport Simulator) -->
   <div class="w-full max-w-md min-h-screen bg-surface shadow-2xl relative flex flex-col border-x border-slate-200/80">
@@ -310,70 +310,70 @@
       <!-- ============================================== -->
       <!-- VIEW 2: REGISTRAR (NUEVO MOVIMIENTO)           -->
       <!-- ============================================== -->
-      <section id="view-registrar" class="view-panel px-margin space-y-space-md">
+      <section id="view-registrar" class="view-panel px-4 space-y-3 pb-8">
         
         <!-- Type Segmented Control -->
-        <div id="typeSegment" class="w-full bg-surface-container-low p-space-xs rounded-xl shadow-xs flex items-center justify-between">
-          <button data-type="gasto" class="flex-1 py-2 px-space-sm rounded-lg bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-1 shadow-xs transition-all font-semibold" type="button">
+        <div id="typeSegment" class="w-full bg-surface-container-low p-1 rounded-xl shadow-xs flex items-center justify-between">
+          <button data-type="gasto" class="flex-1 py-1.5 px-3 rounded-lg bg-primary text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-1 shadow-xs transition-all font-semibold cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">trending_down</span>
             Gasto
           </button>
-          <button data-type="ingreso" class="flex-1 py-2 px-space-sm rounded-lg text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface flex items-center justify-center gap-1 transition-all" type="button">
+          <button data-type="ingreso" class="flex-1 py-1.5 px-3 rounded-lg text-on-surface-variant font-label-lg text-label-lg hover:text-on-surface flex items-center justify-center gap-1 transition-all cursor-pointer" type="button">
             <span class="material-symbols-outlined text-[18px]">trending_up</span>
             Ingreso
           </button>
         </div>
 
         <!-- Hero Amount Card -->
-        <div class="relative w-full rounded-xl bg-primary-container text-on-primary p-space-lg shadow-md overflow-hidden flex flex-col items-center justify-center">
+        <div class="relative w-full rounded-xl bg-primary-container text-on-primary p-3.5 shadow-md overflow-hidden flex flex-col items-center justify-center">
           <div class="absolute -right-12 -top-12 w-44 h-44 rounded-full bg-secondary-container/15 blur-2xl pointer-events-none"></div>
           <div class="absolute -left-10 -bottom-10 w-36 h-36 rounded-full bg-secondary/20 blur-xl pointer-events-none"></div>
 
-          <div class="relative z-10 flex items-center gap-space-xs mb-space-xs">
-            <span class="text-on-primary-container font-label-md uppercase tracking-wider">Valor / Monto</span>
-            <span class="bg-surface-container-lowest/15 px-space-sm py-0.5 rounded-full text-primary-fixed font-data-sm">
+          <div class="relative z-10 flex items-center gap-1 mb-1">
+            <span class="text-on-primary-container font-label-md uppercase tracking-wider text-[11px]">Valor / Monto</span>
+            <span class="bg-surface-container-lowest/15 px-2 py-0.5 rounded-full text-primary-fixed text-[11px] font-bold">
               COP ($)
             </span>
           </div>
 
           <!-- Main Amount Interactive Display & Input -->
-          <div class="relative z-10 flex items-center justify-center gap-1 my-space-xs">
-            <span class="text-primary-fixed font-display-lg-mobile opacity-80">$</span>
-            <input id="expenseAmountInput" type="number" step="1000" min="0" placeholder="0" class="w-56 bg-transparent text-center font-data-metric text-[40px] leading-none tracking-tight font-bold text-on-primary outline-none border-b border-primary-fixed/30 focus:border-primary-fixed"/>
+          <div class="relative z-10 flex items-center justify-center gap-1 my-0.5">
+            <span class="text-primary-fixed text-2xl font-bold opacity-80">$</span>
+            <input id="expenseAmountInput" type="number" step="1000" min="0" placeholder="0" class="w-52 bg-transparent text-center font-data-metric text-[32px] leading-none tracking-tight font-bold text-on-primary outline-none border-b border-primary-fixed/30 focus:border-primary-fixed"/>
           </div>
 
-          <p class="relative z-10 text-on-primary-container font-body-sm flex items-center gap-1">
-            <span class="material-symbols-outlined text-[15px] text-secondary-fixed">cloud_sync</span>
-            Se sincroniza con: <span class="font-data-sm text-primary-fixed ml-1">BDGastosApp</span>
+          <p class="relative z-10 text-on-primary-container text-[11px] flex items-center gap-1 mt-0.5">
+            <span class="material-symbols-outlined text-[13px] text-secondary-fixed">cloud_sync</span>
+            Se sincroniza con: <span class="font-semibold text-primary-fixed ml-0.5">BDGastosApp</span>
           </p>
         </div>
 
         <!-- SECCIÓN DINÁMICA: GASTOS (Macro-categoría -> Subcategoría -> Concepto) -->
-        <div id="gastoFields" class="space-y-space-md">
+        <div id="gastoFields" class="space-y-3">
           <!-- 1. Macro-categoría -->
           <div class="space-y-1">
-            <label class="font-headline-sm text-on-surface block">1. Macro-categoría</label>
-            <div id="regMacroGrid" class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+            <label class="text-label-md font-bold text-on-surface block">1. Macro-categoría</label>
+            <div id="regMacroGrid" class="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
               <!-- Cargado dinámicamente: Necesidades, Deseos, Deudas, Ahorros, Inversiones -->
             </div>
           </div>
 
           <!-- 2. Subcategoría -->
-          <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-2">
+          <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs space-y-1.5 border border-slate-100">
             <div class="flex items-center justify-between">
-              <span class="font-label-lg text-on-surface font-semibold">2. Subcategoría</span>
-              <span class="text-[12px] text-secondary font-medium">Dependiente</span>
+              <span class="text-label-md text-on-surface font-bold">2. Subcategoría</span>
+              <span class="text-[11px] text-secondary font-medium">Dependiente de macro</span>
             </div>
-            <div id="regSubcatList" class="flex flex-wrap gap-2 pt-1">
+            <div id="regSubcatList" class="flex flex-wrap gap-1.5 pt-0.5">
               <!-- Cargado dinámicamente -->
             </div>
           </div>
 
           <!-- 3. Concepto de Gasto -->
-          <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-2">
-            <label class="font-label-lg text-on-surface font-semibold block" for="regConceptoSelect">3. Concepto de Gasto</label>
+          <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs space-y-1.5 border border-slate-100">
+            <label class="text-label-md text-on-surface font-bold block" for="regConceptoSelect">3. Concepto de Gasto</label>
             <div class="relative">
-              <select id="regConceptoSelect" class="w-full h-12 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary">
+              <select id="regConceptoSelect" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary cursor-pointer">
                 <!-- Opciones según la subcategoría -->
               </select>
             </div>
@@ -381,20 +381,20 @@
         </div>
 
         <!-- SECCIÓN DINÁMICA: INGRESOS (Tipo de Ingreso -> Concepto de Ingreso) -->
-        <div id="ingresoFields" class="space-y-space-md hidden">
+        <div id="ingresoFields" class="space-y-3 hidden">
           <!-- 1. Tipo de Ingreso -->
           <div class="space-y-1">
-            <label class="font-headline-sm text-on-surface block">1. Tipo de Ingreso</label>
+            <label class="text-label-md font-bold text-on-surface block">1. Tipo de Ingreso</label>
             <div id="regTipoIngresoGrid" class="grid grid-cols-2 gap-2">
               <!-- Laboral, Gubernamental, Capacitación, Servicios -->
             </div>
           </div>
 
           <!-- 2. Concepto de Ingreso -->
-          <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-2">
-            <label class="font-label-lg text-on-surface font-semibold block" for="regConceptoIngresoSelect">2. Concepto de Ingreso</label>
+          <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs space-y-1.5 border border-slate-100">
+            <label class="text-label-md text-on-surface font-bold block" for="regConceptoIngresoSelect">2. Concepto de Ingreso</label>
             <div class="relative">
-              <select id="regConceptoIngresoSelect" class="w-full h-12 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary">
+              <select id="regConceptoIngresoSelect" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary cursor-pointer">
                 <!-- Opciones según el tipo de ingreso -->
               </select>
             </div>
@@ -402,21 +402,21 @@
         </div>
 
         <!-- Nota / Detalle común -->
-        <div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-xs space-y-2">
-          <label class="font-label-md text-on-surface-variant block" for="expenseNote">Nota o descripción (opcional)</label>
+        <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs space-y-1.5 border border-slate-100">
+          <label class="text-label-md font-semibold text-on-surface-variant block" for="expenseNote">Nota o descripción (opcional)</label>
           <div class="relative flex items-center">
-            <span class="material-symbols-outlined absolute left-3 text-outline text-[20px]">edit_note</span>
-            <input id="expenseNote" class="w-full h-12 pl-10 pr-space-md rounded-lg bg-surface-container-low text-on-surface font-body-md placeholder:text-outline focus:outline-none focus:bg-surface-container" placeholder="Ej. Pago mensual de arriendo" type="text"/>
+            <span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">edit_note</span>
+            <input id="expenseNote" class="w-full h-11 pl-9 pr-3 rounded-lg bg-surface-container-low text-on-surface text-[15px] placeholder:text-outline focus:outline-none focus:bg-surface-container" placeholder="Ej. Pago mensual de arriendo" type="text"/>
           </div>
         </div>
 
         <!-- Primary Action CTA Button -->
-        <div class="w-full pt-space-xs pb-space-lg">
-          <button id="saveExpenseBtn" class="w-full h-14 rounded-xl bg-primary text-on-primary font-label-lg flex items-center justify-center gap-2 shadow-md hover:bg-tertiary transition-transform active:scale-[0.98]" type="button">
-            <span class="material-symbols-outlined text-[22px]">cloud_upload</span>
+        <div class="w-full pt-1 pb-4">
+          <button id="saveExpenseBtn" class="w-full h-12 rounded-xl bg-primary text-on-primary font-label-lg font-bold flex items-center justify-center gap-2 shadow-md hover:bg-tertiary transition-transform active:scale-[0.98] cursor-pointer" type="button">
+            <span class="material-symbols-outlined text-[20px]">cloud_upload</span>
             <span id="saveExpenseText">Guardar Gasto en Google Sheets</span>
           </button>
-          <p class="text-center font-body-sm text-on-surface-variant mt-2">
+          <p class="text-center text-[12px] text-on-surface-variant mt-1.5">
             Se registrará en la pestaña correspondiente de tu Google Sheet
           </p>
         </div>

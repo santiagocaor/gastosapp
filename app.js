@@ -764,6 +764,12 @@ function initFormSelectors() {
   window.selectSub = function(s) {
     selectedSub = s;
     renderSubcatButtons();
+    setTimeout(() => {
+      const selectBox = document.getElementById('regConceptoSelect');
+      if (selectBox) {
+        selectBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 60);
   };
 
   // Render Ingresos Selectors
