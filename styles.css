@@ -1,19 +1,33 @@
 /* Custom Animations and Styling for GastosApp */
+* {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
 @layer base {
   html, body {
-    width: 100vw;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
     margin: 0;
     padding: 0;
   }
   body {
-    overscroll-behavior: none;
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
     font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
+  button, a {
+    touch-action: manipulation;
+  }
+  input, select, textarea {
+    font-size: 16px; /* Prevents auto-zoom on iOS Safari */
+  }
   .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 16px);
+    padding-bottom: max(env(safe-area-inset-bottom, 16px), 16px);
   }
   .pt-safe {
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: max(env(safe-area-inset-top, 0px), 0px);
   }
 }
 
