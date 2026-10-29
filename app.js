@@ -825,6 +825,7 @@ const ui = {
   openAcc: new Set(),
   categorySearch: '',
   converterOpen: false,
+  taxOpen: false,
   mov: { q: '', type: 'all', cat: 'all', period: 'mes' } // filtros de la pestaña Movimientos
 };
 
@@ -960,7 +961,11 @@ function initActions() {
         renderMovementsView();
         break;
       case 'copy-tax': copyTax(d.part); break;
-      case 'use-tax-total': useTaxTotal(); break;
+      case 'toggle-tax':
+        ui.taxOpen = !ui.taxOpen;
+        renderConverterToggle();
+        if (ui.taxOpen) setTimeout(() => document.getElementById('taxAmount')?.focus(), 50);
+        break;
       case 'toggle-converter':
         ui.converterOpen = !ui.converterOpen;
         renderConverterToggle();
@@ -1101,6 +1106,9 @@ function renderConverterToggle() {
   document.getElementById('converterBody')?.classList.toggle('hidden', !ui.converterOpen);
   document.getElementById('converterChevron')?.classList.toggle('rotate-180', ui.converterOpen);
   document.getElementById('converterToggleBtn')?.setAttribute('aria-expanded', ui.converterOpen);
+  document.getElementById('taxBody')?.classList.toggle('hidden', !ui.taxOpen);
+  document.getElementById('taxChevron')?.classList.toggle('rotate-180', ui.taxOpen);
+  document.getElementById('taxToggleBtn')?.setAttribute('aria-expanded', ui.taxOpen);
 }
 
 function renderCurrencyLabels() {
@@ -2806,10 +2814,6 @@ window.setConverterValue = function(val) {
 const GST_RATE = 5;
 const QST_RATE = 9.975;
 
-function formatRate(r) {
-  return `${r.toLocaleString('es-CO', { maximumFractionDigits: 3 })} %`;
-}
-
 function computeTaxes(amount) {
   const base = Math.round((Number(amount) || 0) * 100) / 100;
   // +1e-7 evita que 4,4999999 (coma flotante) se redondee hacia abajo
@@ -2860,34 +2864,11 @@ function fallbackCopy(text, done) {
   ta.remove();
 }
 
-// part: 'total' | 'federal' | 'provincial' | 'detalle'
+// part: 'total' | 'federal' | 'provincial'
 function copyTax(part) {
   const t = computeTaxes(taxAmountValue());
   if (t.base <= 0) return;
-  if (part === 'detalle') {
-    copyText([
-      `Subtotal: ${formatCurrency(t.base, 'CAD')}`,
-      `TPS/GST (${formatRate(GST_RATE)}): ${formatCurrency(t.federal, 'CAD')}`,
-      `TVQ/QST (${formatRate(QST_RATE)}): ${formatCurrency(t.provincial, 'CAD')}`,
-      `Total: ${formatCurrency(t.total, 'CAD')}`
-    ].join('\n'), 'detalle de impuestos');
-    return;
-  }
   copyText(t[part].toFixed(2), formatCurrency(t[part], 'CAD'));
-}
-
-// Abre Registrar con el total (en CAD) como monto del gasto
-function useTaxTotal() {
-  const t = computeTaxes(taxAmountValue());
-  if (t.base <= 0) return;
-  resetForm();
-  form.type = 'gasto';
-  switchView('registrar');
-  setFormCurrency('CAD');
-  const amt = document.getElementById('expenseAmountInput');
-  if (amt) amt.value = t.total.toFixed(2);
-  renderFormSelectors();
-  showToast(`Total con impuestos: ${formatCurrency(t.total, 'CAD')}`, 'info');
 }
 
 window.copyConversionResult = function() {

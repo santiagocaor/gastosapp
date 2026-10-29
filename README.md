@@ -13,7 +13,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Selector de mes para revisar meses anteriores (también lo usan Movimientos, Estadísticas y Presupuesto).
   - Barra de presupuesto global con lo que queda y los días restantes del mes.
   - Recurrentes por confirmar, conversor de divisas plegable y los últimos 5 movimientos.
-  - **Impuestos Quebec**: escribe el precio en CAD y calcula TPS/GST 5 % (federal) + TVQ/QST 9,975 % (provincial) y el total. Botones para copiar el total o el detalle (también se puede tocar cada impuesto para copiarlo) y para registrar el total como gasto.
+  - **Impuestos Quebec** (plegable, como el conversor): escribe el precio en CAD y calcula TPS/GST 5 % (federal) + TVQ/QST 9,975 % (provincial) y el total, con un botón para copiarlo.
 - ➕ **Registrar**
   - Gastos por macro-categoría → subcategoría → concepto (Necesidades, Deseos, Deudas, Ahorros, Inversiones).
   - Ingresos por tipo → concepto.
