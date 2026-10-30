@@ -471,6 +471,10 @@ class AppState {
     if (typeof d.sheetsVersion !== 'number') d.sheetsVersion = 0;
     if (!Array.isArray(d.recurrentes)) d.recurrentes = [];
     if (!MEDIOS_PAGO[d.registroMedio]) d.registroMedio = 'debito';
+    // Script v7: presupuestos y recurrentes en la hoja
+    if (typeof d.presupuestosPendientes !== 'number') d.presupuestosPendientes = 0; // marca de la edición sin enviar (0 = nada)
+    if (!Array.isArray(d.pendingRecDeletes)) d.pendingRecDeletes = [];             // ids de recurrentes borrados sin enviar
+    if (typeof d.recurrentesEnHoja !== 'boolean') d.recurrentesEnHoja = false;     // ya se hizo la primera sincronización
   }
 
   save() {
@@ -544,7 +548,198 @@ class AppState {
       this.data.presupuestoMoneda = cur;
     }
     this.data.presupuestos[macro] = cur === 'CAD' ? Math.round(amountDisplay * 100) / 100 : Math.round(amountDisplay);
+    this.markBudgetsDirty();
+  }
+
+  // ---------- Presupuestos y recurrentes en la hoja (script v7) ----------
+  // Regla de conflictos: cada cambio hecho en la app se envía a la hoja (o queda en cola sin
+  // conexión) y al sincronizar la hoja manda, salvo lo que este dispositivo aún no ha enviado.
+  // Así, lo último que llega a la hoja gana. Si la pestaña Presupuestos está vacía se suben
+  // los de la app; la primera vez, los recurrentes de la app se suman a los de la hoja.
+
+  supportsConfig() {
+    return this.isFullSync() && this.data.sheetsVersion >= 7;
+  }
+
+  // Cada edición lleva una marca: si cambia mientras se envía, sigue pendiente
+  editStamp() {
+    this._stamp = Math.max(Date.now(), (this._stamp || 0) + 1);
+    return this._stamp;
+  }
+
+  markBudgetsDirty() {
+    this.data.presupuestosPendientes = this.editStamp();
     this.save();
+    this.pushConfigSoon();
+  }
+
+  markRecurringDirty(tpl) {
+    tpl.synced = false;
+    tpl.editado = this.editStamp();
+    this.save();
+    this.pushConfigSoon();
+  }
+
+  deleteRecurring(id) {
+    this.data.recurrentes = this.data.recurrentes.filter(t => t.id !== id);
+    if (!this.data.pendingRecDeletes.includes(id)) this.data.pendingRecDeletes.push(id);
+    this.save();
+    this.pushConfigSoon();
+  }
+
+  configPendingCount() {
+    if (!this.supportsConfig()) return 0;
+    return (this.data.presupuestosPendientes ? 1 : 0)
+      + this.data.recurrentes.filter(t => t.synced === false).length
+      + this.data.pendingRecDeletes.length;
+  }
+
+  recurringPayload(tpl) {
+    const d = tpl.datos;
+    const gasto = tpl.type === 'gasto';
+    return {
+      id: tpl.id,
+      type: tpl.type,
+      categoria: (gasto ? d.macroCategoria : d.tipoIngreso) || '',
+      subcategoria: gasto ? d.subcategoria || '' : '',
+      concepto: d.concepto || '',
+      nota: d.nota || '',
+      monto: d.moneda === 'CAD' ? Number(d.montoOriginal) : Number(d.valor),
+      moneda: d.moneda === 'CAD' ? 'CAD' : 'COP',
+      medioPago: gasto ? MEDIOS_PAGO[d.medioPago]?.label || '' : '',
+      dia: tpl.dia,
+      modo: tpl.modo,
+      activo: tpl.activo,
+      ultimo: tpl.ultimo
+    };
+  }
+
+  remoteToTemplate(r, prev) {
+    const gasto = r.type !== 'ingreso';
+    const cad = r.moneda === 'CAD';
+    const monto = toAmount(r.monto);
+    return {
+      id: String(r.id),
+      type: gasto ? 'gasto' : 'ingreso',
+      modo: r.modo === 'auto' ? 'auto' : 'proponer',
+      activo: r.activo !== false,
+      dia: Math.min(Math.max(Math.round(Number(r.dia)) || 1, 1), 31),
+      // Fila agregada a mano sin "Último mes": se empieza por el mes en curso
+      ultimo: /^\d{4}-\d{2}$/.test(r.ultimo || '') ? r.ultimo : shiftMonth(currentMonthKey(), -1),
+      datos: {
+        macroCategoria: gasto ? r.categoria || 'Necesidades' : undefined,
+        subcategoria: gasto ? r.subcategoria || 'Varios' : undefined,
+        tipoIngreso: gasto ? undefined : r.categoria || 'Laboral',
+        concepto: r.concepto || '',
+        nota: r.nota || '',
+        moneda: cad ? 'CAD' : 'COP',
+        medioPago: gasto ? normalizeMedio(r.medioPago) : undefined,
+        montoOriginal: cad ? monto : undefined,
+        valor: cad ? Math.round(monto * cadRate()) : Math.round(monto)
+      },
+      creado: prev?.creado || Date.now(),
+      synced: true
+    };
+  }
+
+  // Envía en segundo plano lo editado (sin esperar a la próxima sincronización)
+  pushConfigSoon() {
+    if (!this.supportsConfig() || !navigator.onLine) return;
+    clearTimeout(this._configTimer);
+    this._configTimer = setTimeout(() => this.pushConfig().then(() => renderNotifications()), 300);
+  }
+
+  // Envía borrados, presupuestos y recurrentes pendientes (uno a la vez, en orden)
+  pushConfig() {
+    this._configPush = (this._configPush || Promise.resolve()).then(() => this.pushConfigNow());
+    return this._configPush;
+  }
+
+  async pushConfigNow() {
+    if (!this.supportsConfig()) return;
+    const ids = [...this.data.pendingRecDeletes];
+    if (ids.length) {
+      const r = await this.callSheets({ action: 'deleteRecurring', ids });
+      if (!r.ok) return;
+      this.data.pendingRecDeletes = this.data.pendingRecDeletes.filter(id => !ids.includes(id));
+      this.save();
+    }
+    const stamp = this.data.presupuestosPendientes;
+    if (stamp) {
+      const r = await this.callSheets({ action: 'setBudgets', currency: this.data.presupuestoMoneda, budgets: { ...this.data.presupuestos } });
+      if (r.network) return;
+      if (r.ok && this.data.presupuestosPendientes === stamp) this.data.presupuestosPendientes = 0;
+      this.save();
+    }
+    const dirty = this.data.recurrentes.filter(t => t.synced === false);
+    if (dirty.length) {
+      const sent = dirty.map(t => [t, t.editado]);
+      const r = await this.callSheets({ action: 'upsertRecurring', items: dirty.map(t => this.recurringPayload(t)) });
+      if (!r.ok) return;
+      sent.forEach(([t, editado]) => { if (t.editado === editado) t.synced = true; });
+      this.save();
+    }
+  }
+
+  // Combina los presupuestos y recurrentes de la hoja con los de la app.
+  // Devuelve true si quedó algo por enviar (p. ej. la primera vez).
+  mergeConfig(remote) {
+    // Presupuestos: la hoja manda, salvo una edición local sin enviar
+    if (!this.data.presupuestosPendientes) {
+      const rows = remote.budgets.filter(b => b && b.macro);
+      if (rows.length === 0) {
+        this.data.presupuestosPendientes = this.editStamp(); // hoja vacía: se suben los de la app
+      } else {
+        const cur = rows[0].moneda === 'COP' ? 'COP' : 'CAD';
+        const presupuestos = {};
+        rows.forEach(b => {
+          const v = toAmount(b.limite);
+          const from = b.moneda === 'COP' ? 'COP' : 'CAD';
+          const conv = from === cur ? v : cur === 'CAD' ? v / cadRate() : v * cadRate();
+          presupuestos[b.macro] = cur === 'CAD' ? Math.round(conv * 100) / 100 : Math.round(conv);
+        });
+        this.data.presupuestos = presupuestos;
+        this.data.presupuestoMoneda = cur;
+      }
+    }
+
+    // Recurrentes, por id
+    const firstTime = !this.data.recurrentesEnHoja;
+    const deleted = new Set(this.data.pendingRecDeletes);
+    const localById = new Map(this.data.recurrentes.map(t => [t.id, t]));
+    const remoteIds = new Set();
+    const merged = [];
+    remote.recurring.forEach(r => {
+      if (!r || !r.id || deleted.has(String(r.id))) return;
+      remoteIds.add(String(r.id));
+      const prev = localById.get(String(r.id));
+      if (prev && prev.synced === false) {
+        // Edición local sin enviar: se conserva (sin retroceder el último mes registrado)
+        if (r.ultimo > prev.ultimo) prev.ultimo = r.ultimo;
+        merged.push(prev);
+        return;
+      }
+      const tpl = this.remoteToTemplate(r, prev);
+      // Un mes ya registrado u omitido en este dispositivo no se vuelve a proponer
+      if (prev && prev.ultimo > tpl.ultimo) {
+        tpl.ultimo = prev.ultimo;
+        tpl.synced = false;
+        tpl.editado = this.editStamp();
+      }
+      merged.push(tpl);
+    });
+    this.data.recurrentes.forEach(t => {
+      if (remoteIds.has(t.id)) return;
+      if (t.synced === false) merged.push(t);       // creado aquí, aún sin enviar
+      else if (firstTime) {                          // la primera vez se suben los de la app
+        t.synced = false;
+        t.editado = this.editStamp();
+        merged.push(t);
+      }                                              // si no, se borró en la hoja u otro dispositivo
+    });
+    this.data.recurrentes = merged;
+    this.data.recurrentesEnHoja = true;
+    return this.configPendingCount() > 0;
   }
 
   list(type) {
@@ -640,7 +835,7 @@ class AppState {
   }
 
   pendingCount() {
-    return this.getPending().length + (this.isFullSync() ? this.data.pendingDeletes.length : 0);
+    return this.getPending().length + (this.isFullSync() ? this.data.pendingDeletes.length : 0) + this.configPendingCount();
   }
 
   async syncItem(type, item) {
@@ -682,6 +877,7 @@ class AppState {
     for (const p of this.getPending()) {
       if (!(await this.syncItem(p.type, p.item)) && !this.isFullSync()) break;
     }
+    await this.pushConfig();
     return this.pendingCount();
   }
 
@@ -805,6 +1001,8 @@ class AppState {
         if (this.isFullSync()) {
           remote = await this.callSheets({ action: 'list' });
           if (!remote.ok) throw new Error(remote.error || 'Respuesta inválida del script');
+          // Así se nota cuando se publica una versión nueva del script
+          if (typeof remote.version === 'number') this.data.sheetsVersion = remote.version;
         } else {
           const res = await fetch(this.data.googleScriptUrl);
           remote = await res.json();
@@ -849,8 +1047,18 @@ class AppState {
           this.data[key] = [...pending, ...fromSheet];
         });
 
+        // Script v7: presupuestos y recurrentes compartidos (después de los movimientos, para
+        // que los recurrentes ya registrados en otro dispositivo no se vuelvan a crear)
+        let configChanged = false;
+        if (this.supportsConfig() && Array.isArray(remote.budgets) && Array.isArray(remote.recurring)) {
+          const before = JSON.stringify([this.data.presupuestos, this.data.presupuestoMoneda, this.data.recurrentes]);
+          if (this.mergeConfig(remote)) await this.pushConfig();
+          configChanged = before !== JSON.stringify([this.data.presupuestos, this.data.presupuestoMoneda, this.data.recurrentes]);
+        }
+
         this.data.lastPull = Date.now();
         this.save();
+        if (configChanged) processRecurring();
         renderAll();
 
         const left = this.pendingCount();
@@ -1770,7 +1978,7 @@ function resetBudgets() {
   if (!confirm('¿Restablecer los presupuestos sugeridos para todas las categorías?')) return;
   state.data.presupuestos = { ...PRESUPUESTOS_DEFAULT };
   state.data.presupuestoMoneda = 'COP';
-  state.save();
+  state.markBudgetsDirty();
   renderAll();
   showToast('Presupuestos restablecidos');
 }
@@ -1960,8 +2168,10 @@ function computeAlerts() {
   if (pending - rejected.length > 0 && state.data.googleScriptUrl) {
     alerts.push({ level: 'info', icon: 'cloud_off', title: 'Cambios sin sincronizar', text: `${pending - rejected.length} cambio(s) aún no llegan a Google Sheets. Se reintentará al recuperar la conexión.` });
   }
-  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 6) {
-    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v6)', text: 'La nueva versión de apps-script/Code.gs funciona con Tablas de Google Sheets, lee tus categorías de BDGastos/BDIngresos y guarda moneda, tasa y medio de pago.' });
+  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 7) {
+    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v7)', text: state.data.sheetsVersion < 6
+      ? 'La nueva versión de apps-script/Code.gs funciona con Tablas de Google Sheets, lee tus categorías de BDGastos/BDIngresos, guarda moneda, tasa y medio de pago, y comparte presupuestos y recurrentes entre tus dispositivos.'
+      : 'Con la nueva versión de apps-script/Code.gs, tus presupuestos y movimientos recurrentes se guardan en la hoja y son los mismos en todos tus dispositivos. Hoy solo están en este.' });
   }
   if (state.data.googleScriptUrl && state.data.sheetsProtocol === 1) {
     alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script', text: 'Con el script antiguo, editar o borrar no llega a Google Sheets. Reemplázalo por apps-script/Code.gs para sincronizar en ambos sentidos.' });
@@ -2033,7 +2243,7 @@ function addRecurring(type, item, modo) {
     creado: Date.now()
   };
   state.data.recurrentes.push(tpl);
-  state.save();
+  state.markRecurringDirty(tpl);
   return tpl;
 }
 
@@ -2072,8 +2282,12 @@ function recurringFields(tpl, monthKey) {
 }
 
 function markRecurringDone(tpl, monthKey) {
-  if (monthKey > tpl.ultimo) tpl.ultimo = monthKey;
-  state.save();
+  if (monthKey > tpl.ultimo) {
+    tpl.ultimo = monthKey;
+    state.markRecurringDirty(tpl);
+  } else {
+    state.save();
+  }
 }
 
 // Crea el movimiento de un mes si aún no existe
@@ -2211,7 +2425,7 @@ function handleRecurringAction(action, tplId, monthKey) {
       break;
     case 'rec-toggle-mode':
       tpl.modo = tpl.modo === 'auto' ? 'proponer' : 'auto';
-      state.save();
+      state.markRecurringDirty(tpl);
       if (tpl.modo === 'auto') processRecurring();
       break;
     case 'rec-toggle-active':
@@ -2221,13 +2435,12 @@ function handleRecurringAction(action, tplId, monthKey) {
         const prev = shiftMonth(currentMonthKey(), -1);
         if (tpl.ultimo < prev) tpl.ultimo = prev;
       }
-      state.save();
+      state.markRecurringDirty(tpl);
       if (tpl.activo) processRecurring();
       break;
     case 'rec-delete':
       if (!confirm(`¿Eliminar el recurrente "${tpl.datos.concepto}"?\nLos movimientos ya registrados no se borran.`)) return;
-      state.data.recurrentes = state.data.recurrentes.filter(t => t.id !== tplId);
-      state.save();
+      state.deleteRecurring(tplId);
       break;
   }
   renderAll();
@@ -2244,7 +2457,7 @@ function updateRecurringAmount(tplId, value) {
   }
   if (tpl.datos.moneda === 'CAD') tpl.datos.montoOriginal = Math.round(num * 100) / 100;
   else tpl.datos.valor = Math.round(num);
-  state.save();
+  state.markRecurringDirty(tpl);
   renderAll();
   showToast('Monto del recurrente actualizado (aplica desde el próximo mes)');
 }
@@ -2645,7 +2858,7 @@ window.closeSheetsConfigModal = () => closeModal('sheetsConfigModal');
 function renderSettingsStatus() {
   const pending = state.pendingCount();
   const hasSheets = !!state.data.googleScriptUrl;
-  const mode = { 2: 'Sincronización completa (crear, editar y borrar).', 1: 'Script antiguo: solo se envían registros nuevos. Actualiza el Apps Script para editar y borrar.', 0: 'Conexión sin verificar.' }[state.data.sheetsProtocol];
+  const mode = { 2: state.supportsConfig() ? 'Sincronización completa (movimientos, presupuestos y recurrentes).' : 'Sincronización completa (crear, editar y borrar).', 1: 'Script antiguo: solo se envían registros nuevos. Actualiza el Apps Script para editar y borrar.', 0: 'Conexión sin verificar.' }[state.data.sheetsProtocol];
   const last = state.data.lastPull ? ` Última sincronización: ${new Date(state.data.lastPull).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}` : '';
   setText('syncStatusText', !hasSheets
     ? 'Sin conectar: los datos solo están en este dispositivo.'

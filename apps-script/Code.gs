@@ -1,5 +1,5 @@
 /**
- * GastosApp ⇄ Google Sheets (BDGastosApp) — protocolo v6 · revisión 3 (compatible con columnas con tipo de las Tablas)
+ * GastosApp ⇄ Google Sheets (BDGastosApp) — protocolo v7 (presupuestos y recurrentes compartidos entre dispositivos)
  *
  * Pega este archivo en Extensiones → Apps Script de tu hoja y publícalo como
  * aplicación web (Ejecutar como: tú · Acceso: cualquier usuario).
@@ -7,11 +7,14 @@
  * La app envía POST con cuerpo JSON en text/plain (así el navegador no hace
  * preflight CORS y puede leer la respuesta). Acciones:
  *   ping                → { ok, version }
- *   list                → { ok, version, valorCurrency, gastos, ingresos, catalog }
+ *   list                → { ok, version, valorCurrency, gastos, ingresos, catalog, budgets, recurring }
  *   catalog             → { ok, version, catalog }
  *   upsert (o create)   → crea la fila o la actualiza si el id ya existe
  *   update              → igual que upsert
  *   delete              → borra la fila con ese id (no falla si ya no existe)
+ *   setBudgets          → reemplaza la pestaña Presupuestos ({ currency, budgets: { macro: límite } })
+ *   upsertRecurring     → crea o actualiza recurrentes por id ({ items: [...] })
+ *   deleteRecurring     → borra recurrentes por id ({ ids: [...] })
  *
  * Funciona con rangos normales o con Tablas de Google Sheets: cada columna se
  * ubica por su encabezado (fila 1), así que puedes reordenarlas o agregar otras.
@@ -29,6 +32,10 @@
  * El catálogo de categorías se lee de las pestañas BDGastos (Macro-categoría,
  * Subcategoría, Concepto) y BDIngresos (Tipo de ingreso, Concepto): lo que
  * cambies ahí aparece en la app.
+ *
+ * Desde la v7, los presupuestos (pestaña Presupuestos) y los movimientos recurrentes
+ * (pestaña Recurrentes) también viven en la hoja: así son los mismos en todos los
+ * dispositivos. Las pestañas se crean solas la primera vez que la app los envía.
  */
 
 const CONFIG = {
@@ -62,10 +69,41 @@ const CONFIG = {
   CATALOG: {
     gasto: { name: 'BDGastos', macro: ['macro categoria', 'macrocategoria', 'categoria'], sub: ['subcategoria', 'sub categoria'], concepto: ['concepto de gasto', 'concepto'] },
     ingreso: { name: 'BDIngresos', tipo: ['tipo de ingreso', 'tipo', 'categoria'], concepto: ['concepto de ingreso', 'concepto'] }
+  },
+  // Configuración compartida entre dispositivos (v7): [campo, encabezado, sinónimos]
+  CONFIG_SHEETS: {
+    budgets: {
+      name: 'Presupuestos',
+      key: 'macro',
+      columns: [
+        ['macro', 'Macro-categoría', ['macro categoria', 'macrocategoria', 'categoria']],
+        ['limite', 'Límite', ['limite', 'limite mensual', 'presupuesto', 'monto']],
+        ['moneda', 'Moneda', ['moneda']]
+      ]
+    },
+    recurring: {
+      name: 'Recurrentes',
+      key: 'id',
+      columns: [
+        ['id', 'ID', ['id']],
+        ['tipo', 'Tipo', ['tipo']],
+        ['categoria', 'Macro-categoría / Tipo de ingreso', ['macro categoria tipo de ingreso', 'macro categoria', 'categoria', 'tipo de ingreso']],
+        ['subcategoria', 'Subcategoría', ['subcategoria', 'sub categoria']],
+        ['concepto', 'Concepto', ['concepto']],
+        ['nota', 'Nota', ['nota', 'notas']],
+        ['monto', 'Monto', ['monto', 'valor']],
+        ['moneda', 'Moneda', ['moneda']],
+        ['medioPago', 'Medio de pago', ['medio de pago', 'metodo de pago', 'forma de pago']],
+        ['dia', 'Día', ['dia', 'dia del mes']],
+        ['modo', 'Modo', ['modo']],
+        ['activo', 'Activo', ['activo']],
+        ['ultimo', 'Último mes', ['ultimo mes', 'ultimo']]
+      ]
+    }
   }
 };
 
-const VERSION = 6;
+const VERSION = 7;
 // Columnas comunes que se ubican por su encabezado: [campo, encabezado, sinónimos]
 const EXTRA_COLUMNS = [
   ['id', 'ID', ['id']],
@@ -104,7 +142,7 @@ function handle_(body) {
       case 'ping':
         return json_({ ok: true, version: VERSION });
       case 'list':
-        return json_({ ok: true, version: VERSION, valorCurrency: 'CAD', gastos: list_('gasto', body), ingresos: list_('ingreso', body), catalog: catalog_() });
+        return json_({ ok: true, version: VERSION, valorCurrency: 'CAD', gastos: list_('gasto', body), ingresos: list_('ingreso', body), catalog: catalog_(), budgets: listBudgets_(), recurring: listRecurring_() });
       case 'catalog':
         return json_({ ok: true, version: VERSION, catalog: catalog_() });
       case 'addCatalog':
@@ -115,6 +153,12 @@ function handle_(body) {
         return json_(upsert_(body));
       case 'delete':
         return json_(remove_(body));
+      case 'setBudgets':
+        return json_(setBudgets_(body));
+      case 'upsertRecurring':
+        return json_(upsertRecurring_(body));
+      case 'deleteRecurring':
+        return json_(deleteRecurring_(body));
       default:
         return json_({ ok: false, error: 'Acción desconocida: ' + action });
     }
@@ -214,7 +258,7 @@ function lastDataRow_(ctx) {
   const last = sh.getLastRow();
   if (last < 2) return 1;
   const values = sh.getRange(2, 1, last - 1, ctx.width).getValues();
-  const keys = [cols.fecha, cols.valor, cols.id, cols.concepto].filter(c => c > 0);
+  const keys = (ctx.keyCols || [cols.fecha, cols.valor, cols.id, cols.concepto]).filter(c => c > 0);
   for (let i = values.length - 1; i >= 0; i--) {
     if (keys.some(c => values[i][c - 1] !== '' && values[i][c - 1] !== null)) return i + 2;
   }
@@ -234,6 +278,25 @@ function findRow_(ctx, id) {
     if (String(rows[i][ctx.cols.id - 1]) === String(id)) return i + 2;
   }
   return -1;
+}
+
+// Escribe varias celdas de una fila y las aplica de inmediato; si la hoja rechaza un valor
+// (lista desplegable), no deja la fila nueva a medias y explica qué columna fue.
+// writes: [[columna, valor, encabezado], ...]
+function writeRow_(sh, row, writes, isNew) {
+  try {
+    writes.forEach(([c, v]) => sh.getRange(row, c).setValue(v));
+    SpreadsheetApp.flush(); // las listas desplegables validan al escribir
+  } catch (err) {
+    if (isNew) writes.forEach(([c]) => sh.getRange(row, c).clearContent());
+    // El mensaje de Google nombra la celda ("cell C2" / "celda C2"): se traduce a su columna
+    const m = String(err && err.message || err).match(/\b([A-Z]{1,3})\d+\b/);
+    const col = m ? m[1].split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) : -1;
+    const bad = writes.find(([c]) => c === col);
+    throw new Error(bad
+      ? `La hoja rechazó «${bad[1]}» en la columna ${bad[2]}: no está en su lista desplegable.`
+      : 'La hoja rechazó el registro (¿un valor que no está en una lista desplegable?): ' + (err && err.message || err));
+  }
 }
 
 // ---------- Migración COP → CAD (una sola vez por pestaña) ----------
@@ -381,20 +444,7 @@ function upsert_(body) {
   // Medio de pago: solo si la app lo envía (las versiones antiguas no lo hacen)
   if (body.paymentType !== undefined) writes.push([cols.medioPago, String(body.paymentType || ''), 'Medio de pago']);
 
-  try {
-    writes.forEach(([c, v]) => sh.getRange(row, c).setValue(v));
-    SpreadsheetApp.flush(); // las listas desplegables validan al escribir
-  } catch (err) {
-    // Si la hoja rechaza un valor (lista desplegable), no se deja la fila a medias
-    if (isNew) writes.forEach(([c]) => sh.getRange(row, c).clearContent());
-    // El mensaje de Google nombra la celda ("cell C2" / "celda C2"): se traduce a su columna
-    const m = String(err && err.message || err).match(/\b([A-Z]{1,3})\d+\b/);
-    const col = m ? m[1].split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) : -1;
-    const bad = writes.find(([c]) => c === col);
-    throw new Error(bad
-      ? `La hoja rechazó «${bad[1]}» en la columna ${bad[2]}: no está en su lista desplegable.`
-      : 'La hoja rechazó el registro (¿un valor que no está en una lista desplegable?): ' + (err && err.message || err));
-  }
+  writeRow_(sh, row, writes, isNew);
   return { ok: true, action: 'upsert', id: id, row: row, valorCAD: inCad ? rec.valor : undefined };
 }
 
@@ -403,6 +453,166 @@ function remove_(body) {
   const row = findRow_(ctx, body.id);
   if (row > 0) ctx.sh.deleteRow(row);
   return { ok: true, action: 'delete', id: String(body.id), deleted: row > 0 };
+}
+
+// ---------- Presupuestos y recurrentes (v7) ----------
+
+// Pestaña de configuración con sus columnas ubicadas por encabezado. Con create=false
+// devuelve null si la pestaña no existe (leer no crea pestañas en la hoja).
+function configSheet_(kind, create) {
+  const conf = CONFIG.CONFIG_SHEETS[kind];
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(conf.name);
+  if (!sh) {
+    if (!create) return null;
+    sh = ss.insertSheet(conf.name);
+  }
+  if (sh.getLastRow() === 0) {
+    if (!create) return null;
+    sh.getRange(1, 1, 1, conf.columns.length).setValues([conf.columns.map(c => c[1])]);
+    safe_(() => sh.getRange(1, 1, 1, conf.columns.length).setFontWeight('bold'));
+    safe_(() => sh.setFrozenRows(1));
+  }
+  const header = headerRow_(sh);
+  const cols = {};
+  conf.columns.forEach(([field, title, synonyms]) => {
+    let c = findColumn_(header, synonyms);
+    if (c < 0) {
+      if (!create) { cols[field] = -1; return; }
+      c = header.length + 1;
+      sh.getRange(1, c).setValue(title);
+      header.push(title);
+    }
+    cols[field] = c;
+  });
+  return { sh, conf, cols, width: header.length, keyCols: [cols[conf.key], cols.concepto].filter(c => c > 0) };
+}
+
+function configRows_(ctx) {
+  return readRows_(ctx).map((row, i) => ({ row: i + 2, get: f => (ctx.cols[f] > 0 ? row[ctx.cols[f] - 1] : '') }));
+}
+
+// [{ macro, limite, moneda }]; [] si la pestaña no existe o está vacía
+function listBudgets_() {
+  const ctx = configSheet_('budgets', false);
+  if (!ctx || ctx.cols.macro < 0) return [];
+  return configRows_(ctx)
+    .map(r => ({ macro: String(r.get('macro') || '').trim(), limite: toNumber_(r.get('limite')), moneda: normCurrency_(r.get('moneda')) }))
+    .filter(b => b.macro);
+}
+
+// Reemplaza los presupuestos: actualiza la fila de cada macro, agrega las nuevas y borra las que ya no están
+function setBudgets_(body) {
+  const budgets = body.budgets && typeof body.budgets === 'object' ? body.budgets : null;
+  if (!budgets) return { ok: false, error: 'Faltan los presupuestos' };
+  const moneda = normCurrency_(body.currency);
+  const ctx = configSheet_('budgets', true);
+  const { sh, cols } = ctx;
+  const key = v => String(v || '').trim().toLowerCase();
+  const wanted = Object.keys(budgets).filter(m => String(m).trim());
+  const seen = {};
+  const remove = [];
+  configRows_(ctx).forEach(r => {
+    const m = key(r.get('macro'));
+    if (!m) return;
+    const name = wanted.find(w => key(w) === m);
+    if (!name || seen[m]) { remove.push(r.row); return; } // ya no existe o está repetida
+    seen[m] = true;
+    writeRow_(sh, r.row, [[cols.limite, toNumber_(budgets[name]), 'Límite'], [cols.moneda, moneda, 'Moneda']], false);
+  });
+  remove.sort((a, b) => b - a).forEach(r => sh.deleteRow(r));
+  wanted.filter(w => !seen[key(w)]).forEach(name => {
+    const row = lastDataRow_(ctx) + 1;
+    writeRow_(sh, row, [[cols.macro, String(name).trim(), 'Macro-categoría'], [cols.limite, toNumber_(budgets[name]), 'Límite'], [cols.moneda, moneda, 'Moneda']], true);
+  });
+  return { ok: true, action: 'setBudgets', count: wanted.length };
+}
+
+// Id de recurrente sin "_" (los movimientos generados usan rec_<plantilla>_<AAAA-MM>)
+function newRecurringId_() {
+  return 'rc' + Utilities.getUuid().replace(/[^a-z0-9]/gi, '').slice(0, 12).toLowerCase();
+}
+
+function clampDay_(v) {
+  return Math.min(Math.max(Math.round(toNumber_(v)) || 1, 1), 31);
+}
+
+function listRecurring_() {
+  const ctx = configSheet_('recurring', false);
+  if (!ctx || ctx.cols.id < 0) return [];
+  const tz = Session.getScriptTimeZone();
+  const out = [];
+  configRows_(ctx).forEach(r => {
+    const concepto = String(r.get('concepto') || '').trim();
+    let id = String(r.get('id') || '').trim();
+    if (!id && !concepto) return; // fila vacía
+    if (!id || id.indexOf('_') >= 0) {
+      // Fila escrita a mano en la hoja (o id con "_", que la app no admite): se le asigna uno
+      id = newRecurringId_();
+      ctx.sh.getRange(r.row, ctx.cols.id).setValue(id);
+    }
+    const medio = String(r.get('medioPago') || '').trim();
+    const rec = {
+      id: id,
+      type: normHeader_(r.get('tipo')) === 'ingreso' ? 'ingreso' : 'gasto',
+      categoria: String(r.get('categoria') || '').trim(),
+      subcategoria: String(r.get('subcategoria') || '').trim(),
+      concepto: concepto,
+      nota: String(r.get('nota') || ''),
+      monto: toNumber_(r.get('monto')),
+      moneda: normCurrency_(r.get('moneda')),
+      dia: clampDay_(r.get('dia')),
+      modo: /auto/.test(normHeader_(r.get('modo'))) ? 'auto' : 'proponer',
+      activo: toBool_(r.get('activo'), true),
+      ultimo: formatMonth_(r.get('ultimo'), tz)
+    };
+    if (medio) rec.medioPago = medio;
+    out.push(rec);
+  });
+  return out;
+}
+
+// items: [{ id, type, categoria, subcategoria, concepto, nota, monto, moneda, medioPago, dia, modo, activo, ultimo }]
+function upsertRecurring_(body) {
+  const items = Array.isArray(body.items) ? body.items : body.recurring ? [body.recurring] : [];
+  const ctx = configSheet_('recurring', true);
+  const { sh, cols } = ctx;
+  const ids = [];
+  items.forEach(it => {
+    const id = String(it.id || newRecurringId_());
+    let row = findRow_(ctx, id);
+    const isNew = row < 0;
+    if (isNew) row = lastDataRow_(ctx) + 1;
+    const gasto = it.type !== 'ingreso';
+    writeRow_(sh, row, [
+      [cols.id, id, 'ID'],
+      [cols.tipo, gasto ? 'Gasto' : 'Ingreso', 'Tipo'],
+      [cols.categoria, String(it.categoria || ''), 'Macro-categoría / Tipo de ingreso'],
+      [cols.subcategoria, gasto ? String(it.subcategoria || '') : '', 'Subcategoría'],
+      [cols.concepto, String(it.concepto || ''), 'Concepto'],
+      [cols.nota, String(it.nota || ''), 'Nota'],
+      [cols.monto, toNumber_(it.monto), 'Monto'],
+      [cols.moneda, normCurrency_(it.moneda), 'Moneda'],
+      [cols.medioPago, gasto ? String(it.medioPago || '') : '', 'Medio de pago'],
+      [cols.dia, clampDay_(it.dia), 'Día'],
+      [cols.modo, it.modo === 'auto' ? 'Automático' : 'Proponer', 'Modo'],
+      [cols.activo, it.activo !== false, 'Activo'],
+      // Con "'" Sheets lo guarda como texto (si no, convierte "2026-10" en una fecha)
+      [cols.ultimo, it.ultimo ? "'" + String(it.ultimo) : '', 'Último mes']
+    ], isNew);
+    ids.push(id);
+  });
+  return { ok: true, action: 'upsertRecurring', ids: ids };
+}
+
+function deleteRecurring_(body) {
+  const ids = (Array.isArray(body.ids) ? body.ids : body.id ? [body.id] : []).map(String);
+  const ctx = configSheet_('recurring', false);
+  if (!ctx || ctx.cols.id < 0) return { ok: true, action: 'deleteRecurring', ids: ids, deleted: 0 };
+  // De abajo hacia arriba para que los números de fila no cambien
+  const rows = configRows_(ctx).filter(r => ids.indexOf(String(r.get('id'))) >= 0).map(r => r.row).sort((a, b) => b - a);
+  rows.forEach(r => ctx.sh.deleteRow(r));
+  return { ok: true, action: 'deleteRecurring', ids: ids, deleted: rows.length };
 }
 
 // ---------- Catálogo ----------
@@ -491,6 +701,7 @@ function onOpen() {
  *  - Fija la fila de encabezados y da formato de fecha y número.
  *  - Pone listas desplegables (en modo "advertencia") donde no hay ninguna:
  *    categorías desde BDGastos/BDIngresos y medio de pago.
+ *  - Crea las pestañas Presupuestos y Recurrentes (v7), que la app llena al sincronizar.
  *  - Crea la pestaña Resumen (gastos por mes y macro-categoría, ingresos por mes).
  * Se puede ejecutar varias veces: lo que ya está bien no se toca.
  */
@@ -544,6 +755,16 @@ function prepararHoja() {
       applyDropdown_(colRange(cols.medioPago), 'Medio de pago', CONFIG.SHEETS[type].name,
         SpreadsheetApp.newDataValidation().requireValueInList(['Débito', 'Efectivo', 'Tarjeta de crédito'], true), notas);
     }
+  });
+
+  // Presupuestos y recurrentes compartidos entre dispositivos (v7)
+  ['budgets', 'recurring'].forEach(kind => {
+    const name = CONFIG.CONFIG_SHEETS[kind].name;
+    const existed = !!ss.getSheetByName(name);
+    const before = existed ? headerRow_(ss.getSheetByName(name)).length : 0;
+    const ctx = configSheet_(kind, true);
+    if (!existed) notas.push(`Creada la pestaña ${name} (la app la llena al sincronizar)`);
+    else if (before > 1 && ctx.width > before) notas.push(`${name}: agregadas ${ctx.width - before} columna(s) al final`);
   });
 
   createSummary_(ss, notas);
@@ -674,6 +895,28 @@ function formatDate_(v, tz) {
   const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (dmy) return dmy[3] + '-' + ('0' + dmy[2]).slice(-2) + '-' + ('0' + dmy[1]).slice(-2);
   return s.slice(0, 10);
+}
+
+// Mes "AAAA-MM". Sheets convierte "2026-10" en fecha al escribirlo, así que se aceptan ambos
+function formatMonth_(v, tz) {
+  if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v)) return Utilities.formatDate(v, tz, 'yyyy-MM');
+  const s = String(v || '').trim().replace(/^'/, '');
+  const ym = s.match(/^(\d{4})-(\d{1,2})/);
+  if (ym) return ym[1] + '-' + ('0' + ym[2]).slice(-2);
+  const my = s.match(/^(?:\d{1,2}\/)?(\d{1,2})\/(\d{4})/);
+  if (my) return my[2] + '-' + ('0' + my[1]).slice(-2);
+  return '';
+}
+
+function normCurrency_(v) {
+  return String(v || '').trim().toUpperCase() === 'COP' ? 'COP' : 'CAD';
+}
+
+function toBool_(v, dflt) {
+  if (v === true || v === false) return v;
+  const s = normHeader_(v);
+  if (!s) return dflt;
+  return !/^(no|n|false|falso|0|inactivo|pausa|en pausa)$/.test(s);
 }
 
 function toNumber_(v) {

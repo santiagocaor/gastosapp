@@ -26,6 +26,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - ⚡ *Automático*: se registra solo el día indicado (si no abriste la app, se ponen al día los meses vencidos, hasta 12).
   - Desde *Ajustes → Movimientos recurrentes* se cambia el monto, el modo, se pausa o se elimina.
   - Cada mes genera un movimiento con id fijo (`rec_<plantilla>_<AAAA-MM>`), así nunca se duplica aunque uses varios dispositivos.
+  - Con el script v7 los recurrentes se guardan en la pestaña **Recurrentes** de la hoja: son los mismos en todos tus dispositivos.
 - 💵 **Dos monedas**
   - Los movimientos en CAD guardan el **monto original y la tasa del día**; `Valor` queda en COP para los totales y la hoja.
   - El botón **CAD/COP** de la cabecera cambia la moneda en que se ven todos los montos. En CAD, lo registrado en CAD se suma exacto; lo registrado en COP se convierte con la tasa de hoy.
@@ -40,13 +41,14 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Agrupado por mes con el neto de cada uno; toca un movimiento para editarlo.
 - 💰 **Presupuesto**
   - Límites mensuales editables en línea por macro-categoría, estado de cada uno y proyección de cierre de mes.
+  - Con el script v7 los límites se guardan en la pestaña **Presupuestos** de la hoja y se comparten entre dispositivos.
   - Catálogo de subcategorías y conceptos dentro de cada categoría, con buscador; toca un concepto para registrarlo.
   - **Conceptos propios**: botón *Concepto* para añadir subcategorías/conceptos nuevos.
   - Los conceptos largos se muestran con un nombre corto (p. ej. “Restaurantes y bares”); en la hoja se guarda el nombre completo.
 - 🔔 **Alertas** de categorías cerca del tope o excedidas, gastos mayores que ingresos y registros sin sincronizar.
 - 💱 **Conversor COP ⇄ CAD** con tasa de mercado en vivo (es la tasa que usan los registros en CAD) (open.er-api.com, con respaldo en exchangerate-api.com).
 - 💾 **Datos**
-  - Todo se guarda en el navegador (`localStorage`).
+  - Todo se guarda en el navegador (`localStorage`); con Google Sheets conectado, los movimientos, presupuestos y recurrentes también quedan en la hoja.
   - Respaldo e importación en JSON y exportación a CSV desde *Ajustes*.
 - 📲 **PWA**: instalable en el celular y con caché sin conexión (service worker).
 
@@ -54,7 +56,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
 
 ## 🔄 Sincronización con Google Sheets
 
-La sincronización es **en ambos sentidos**: lo que crees, edites o borres en la app llega a la hoja, y lo que cambies en la hoja (o desde otro dispositivo) aparece en la app.
+La sincronización es **en ambos sentidos**: lo que crees, edites o borres en la app llega a la hoja, y lo que cambies en la hoja (o desde otro dispositivo) aparece en la app. Desde el script **v7** esto incluye los **presupuestos** y los **movimientos recurrentes**.
 
 ### Instalar el script
 
@@ -67,7 +69,7 @@ La sincronización es **en ambos sentidos**: lo que crees, edites o borres en la
 5. En la app abre **Ajustes** (⚙️), pega la URL y pulsa *Guardar y verificar*. Debe decir “Sincronización completa”.
 
 6. **Prepara la hoja (una vez):** recarga la hoja y usa el menú **GastosApp → Preparar hoja para la app**. Sin borrar ni mover datos:
-   - crea las pestañas que falten (Registro de Gastos, Registro de Ingresos, BDGastos, BDIngresos) con sus encabezados;
+   - crea las pestañas que falten (Registro de Gastos, Registro de Ingresos, BDGastos, BDIngresos, Presupuestos, Recurrentes) con sus encabezados;
    - agrega al final las columnas que falten (Medio de pago, ID, Moneda, Monto original, Tasa CAD→COP);
    - fija la fila de encabezados y da formato de fecha y número;
    - pone listas desplegables en modo *advertencia* donde no hay ninguna (categorías desde BDGastos/BDIngresos y medio de pago) y avisa si alguna de las tuyas *rechaza* valores;
@@ -88,7 +90,7 @@ Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del sc
 - **Migración automática (una vez):** al sincronizar por primera vez con el script v4, las filas que estaban en COP se convierten a CAD con la tasa del día; su monto exacto en COP queda en *Monto original*. Las registradas en CAD recuperan su monto original exacto.
 - **Puedes editar la hoja a mano:** *Valor (CAD)* manda. Si lo cambias, la app ajusta el monto original; una fila nueva escrita a mano se toma como CAD y recibe su id.
 - Hacia la app el script entrega el valor en COP y en CAD, así una versión vieja de la app abierta en otro dispositivo no muestra cifras erradas.
-- Con un script anterior la app sigue funcionando con su catálogo propio (y conserva moneda y medio de pago en el dispositivo), pero avisa para actualizarlo a la v6.
+- Con un script anterior la app sigue funcionando (con un script anterior a la v6, con su catálogo propio y conservando moneda y medio de pago en el dispositivo; con la v6, con presupuestos y recurrentes solo en el dispositivo), y la campana avisa para actualizarlo a la v7.
 - La app envía `POST` con JSON en `text/plain` (sin preflight CORS), lee la respuesta y solo marca un cambio como enviado cuando el script confirma `ok`.
 - Sin conexión, los cambios quedan **pendientes** (☁️ tachado) y se envían solos al volver la red o al abrir la app; también con *Reenviar pendientes*.
 - La app se sincroniza sola al abrirse y al volver a ella (como máximo cada 2 minutos), o con *Sincronizar ahora*.
@@ -96,7 +98,17 @@ Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del sc
 - *Vaciar registros* solo borra los datos del dispositivo; la hoja no se toca.
 - Con el **script antiguo** la app sigue funcionando en modo compatible (solo envía registros nuevos) y muestra un aviso para actualizarlo.
 
-Acciones del script (`POST`): `ping`, `list` (registros + catálogo), `catalog`, `addCatalog`, `upsert` (crea o actualiza por `id`), `delete`. El `GET` sin clave devuelve el listado.
+### Presupuestos y recurrentes en la hoja (v7)
+
+- **Presupuestos** (`Macro-categoría | Límite | Moneda`): una fila por macro-categoría con su límite mensual en la moneda en que lo editaste (CAD o COP).
+- **Recurrentes** (`ID | Tipo | Macro-categoría / Tipo de ingreso | Subcategoría | Concepto | Nota | Monto | Moneda | Medio de pago | Día | Modo | Activo | Último mes`): una fila por plantilla. *Modo* es `Proponer` o `Automático`; *Último mes* (`AAAA-MM`) es el último mes ya registrado u omitido, y evita que otro dispositivo vuelva a proponerlo.
+- Las pestañas se crean solas la primera vez que la app envía algo (o con *Preparar hoja*). Las columnas se ubican por encabezado, igual que en los registros, y funcionan como Tabla de Google Sheets.
+- **Puedes editarlas a mano:** cambia un límite, pausa un recurrente (*Activo* = `No`) o agrega una fila; una fila sin ID recibe uno y, si no tiene *Último mes*, se propone desde el mes en curso. Borrar una fila borra ese recurrente en todos los dispositivos.
+- **Regla de conflictos — lo último que llega a la hoja gana:** cada cambio hecho en la app se envía al momento (o queda pendiente sin conexión, como los movimientos). Al sincronizar, la hoja manda, salvo lo que el dispositivo aún no ha enviado. Los presupuestos viajan como un conjunto: el dispositivo que envía después deja los suyos. El *Último mes* nunca retrocede: si un dispositivo ya registró u omitió un mes más reciente, ese valor se conserva.
+- **Primera sincronización con la v7:** si la pestaña Presupuestos está vacía, se suben los límites de la app (si ya tiene datos, se toman los de la hoja). Los recurrentes de cada dispositivo se **suman** a los de la hoja, así no se pierde ninguno; si quedó alguno repetido, bórralo en un dispositivo y desaparece en los demás.
+- Si vacías a mano la pestaña Presupuestos, el siguiente dispositivo que sincronice la vuelve a llenar con sus límites.
+
+Acciones del script (`POST`): `ping`, `list` (registros, catálogo, presupuestos y recurrentes), `catalog`, `addCatalog`, `upsert` (crea o actualiza por `id`), `delete`, `setBudgets`, `upsertRecurring` y `deleteRecurring`. El `GET` sin clave devuelve el listado.
 
 ---
 
