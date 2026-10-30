@@ -1,5 +1,5 @@
 /**
- * GastosApp ⇄ Google Sheets (BDGastosApp) — protocolo v6
+ * GastosApp ⇄ Google Sheets (BDGastosApp) — protocolo v6 · revisión 3 (compatible con columnas con tipo de las Tablas)
  *
  * Pega este archivo en Extensiones → Apps Script de tu hoja y publícalo como
  * aplicación web (Ejecutar como: tú · Acceso: cualquier usuario).
@@ -186,12 +186,14 @@ function sheet_(type) {
     isNew = true;
   }
   if (sh.getLastRow() === 0) {
-    sh.appendRow(conf.columns.map(c => c[1]).concat(EXTRA_COLUMNS.map(c => c[1])));
+    sh.appendRow(conf.columns.map(c => c[1]).concat(EXTRA_COLUMNS.filter(([f]) => type === 'gasto' || f !== 'medioPago').map(c => c[1])));
     isNew = true;
   }
   const header = headerRow_(sh);
   const cols = {};
-  conf.columns.concat(EXTRA_COLUMNS).forEach(([field, title, synonyms]) => {
+  // El medio de pago solo aplica a gastos
+  const extras = EXTRA_COLUMNS.filter(([field]) => type === 'gasto' || field !== 'medioPago');
+  conf.columns.concat(extras).forEach(([field, title, synonyms]) => {
     let c = findColumn_(header, synonyms);
     if (c < 0) {
       c = header.length + 1;
@@ -393,8 +395,6 @@ function upsert_(body) {
       ? `La hoja rechazó «${bad[1]}» en la columna ${bad[2]}: no está en su lista desplegable.`
       : 'La hoja rechazó el registro (¿un valor que no está en una lista desplegable?): ' + (err && err.message || err));
   }
-  sh.getRange(row, cols.fecha).setNumberFormat('yyyy-mm-dd');
-  if (inCad) sh.getRange(row, cols.valor).setNumberFormat('#,##0.00');
   return { ok: true, action: 'upsert', id: id, row: row, valorCAD: inCad ? rec.valor : undefined };
 }
 
@@ -473,6 +473,171 @@ function addCatalog_(body) {
   }
   [macro, sub, concepto].forEach((v, i) => sh.getRange(row, cols[i]).setValue(v));
   return { ok: true, action: 'addCatalog', row: row };
+}
+
+// ---------- Preparar la hoja (se ejecuta una vez desde el menú GastosApp) ----------
+
+// Menú en la hoja: GastosApp → Preparar hoja
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('GastosApp')
+    .addItem('Preparar hoja para la app', 'prepararHoja')
+    .addToUi();
+}
+
+/**
+ * Deja la hoja lista para sincronizar con la app, sin borrar ni mover datos:
+ *  - Crea las pestañas que falten (registros y catálogos) con sus encabezados.
+ *  - Agrega las columnas que falten al final (Medio de pago, ID, Moneda...).
+ *  - Fija la fila de encabezados y da formato de fecha y número.
+ *  - Pone listas desplegables (en modo "advertencia") donde no hay ninguna:
+ *    categorías desde BDGastos/BDIngresos y medio de pago.
+ *  - Crea la pestaña Resumen (gastos por mes y macro-categoría, ingresos por mes).
+ * Se puede ejecutar varias veces: lo que ya está bien no se toca.
+ */
+function prepararHoja() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const notas = [];
+
+  // Catálogos
+  const catSheet = ensureSheet_(ss, CONFIG.CATALOG.gasto.name, ['Macro-categoría', 'Subcategoría', 'Concepto de Gasto'], notas);
+  const ingCatSheet = ensureSheet_(ss, CONFIG.CATALOG.ingreso.name, ['Tipo de ingreso', 'Concepto de Ingreso'], notas);
+  safe_(() => catSheet.setFrozenRows(1));
+  safe_(() => ingCatSheet.setFrozenRows(1));
+  const catHeader = headerRow_(catSheet);
+  const ingHeader = headerRow_(ingCatSheet);
+  const catCol = k => findColumn_(catHeader, CONFIG.CATALOG.gasto[k]);
+  const ingCol = k => findColumn_(ingHeader, CONFIG.CATALOG.ingreso[k]);
+
+  // Registros (sheet_ crea la pestaña y agrega las columnas que falten)
+  ['gasto', 'ingreso'].forEach(type => {
+    const existed = !!ss.getSheetByName(CONFIG.SHEETS[type].name);
+    const before = existed ? headerRow_(ss.getSheetByName(CONFIG.SHEETS[type].name)).length : 0;
+    const ctx = sheet_(type);
+    const { sh, cols } = ctx;
+    if (!existed) notas.push('Creada la pestaña ' + CONFIG.SHEETS[type].name);
+    else if (ctx.width > before) notas.push(`${CONFIG.SHEETS[type].name}: agregadas ${ctx.width - before} columna(s) al final`);
+    safe_(() => sh.setFrozenRows(1));
+
+    const rows = Math.max(sh.getMaxRows() - 1, 1);
+    const colRange = c => sh.getRange(2, c, rows, 1);
+    // En una Tabla, las columnas con tipo (fecha, moneda...) ya traen su formato y no se cambian
+    [[cols.fecha, 'yyyy-mm-dd'], [cols.valor, '#,##0.00'], [cols.montoOriginal, '#,##0.##'], [cols.tasa, '#,##0.00']]
+      .forEach(([c, f]) => setFormat_(colRange(c), f));
+
+    const lists = type === 'gasto'
+      ? [
+          ['Macro-categoría', cols.macroCategoria, catSheet, catCol('macro')],
+          ['Subcategoría', cols.subcategoria, catSheet, catCol('sub')],
+          ['Concepto de Gasto', cols.concepto, catSheet, catCol('concepto')]
+        ]
+      : [
+          ['Tipo de ingreso', cols.tipoIngreso, ingCatSheet, ingCol('tipo')],
+          ['Concepto de Ingreso', cols.concepto, ingCatSheet, ingCol('concepto')]
+        ];
+    lists.forEach(([title, c, src, srcCol]) => {
+      if (srcCol < 0) return;
+      const source = src.getRange(2, srcCol, Math.max(src.getMaxRows() - 1, 1), 1);
+      applyDropdown_(colRange(c), title, CONFIG.SHEETS[type].name,
+        SpreadsheetApp.newDataValidation().requireValueInRange(source, true), notas);
+    });
+    if (type === 'gasto') {
+      applyDropdown_(colRange(cols.medioPago), 'Medio de pago', CONFIG.SHEETS[type].name,
+        SpreadsheetApp.newDataValidation().requireValueInList(['Débito', 'Efectivo', 'Tarjeta de crédito'], true), notas);
+    }
+  });
+
+  createSummary_(ss, notas);
+
+  const msg = notas.length ? notas.join('\n') : 'La hoja ya estaba lista: no hubo cambios.';
+  try {
+    SpreadsheetApp.getUi().alert('GastosApp', msg, SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    Logger.log(msg); // ejecutado desde el editor de Apps Script
+  }
+  return msg;
+}
+
+function ensureSheet_(ss, name, headers, notas) {
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    notas.push('Creada la pestaña ' + name);
+  }
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sh.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  }
+  return sh;
+}
+
+// Lista desplegable en modo advertencia (no rechaza): solo si la columna no tiene una propia
+function applyDropdown_(range, title, sheetName, builder, notas) {
+  const current = range.getCell(1, 1).getDataValidation();
+  if (current) {
+    if (!current.getAllowInvalid()) {
+      notas.push(`${sheetName} · ${title}: tu lista desplegable rechaza valores; se recomienda "Mostrar advertencia" (no se cambió).`);
+    }
+    return;
+  }
+  let error = null;
+  const ok = safe_(() => {
+    try {
+      range.setDataValidation(builder.setAllowInvalid(true).build());
+    } catch (e) {
+      error = e;
+      throw e;
+    }
+  });
+  notas.push(ok
+    ? `${sheetName} · ${title}: agregada lista desplegable`
+    : `${sheetName} · ${title}: no se pudo agregar la lista${error ? ` (${error.message || error})` : ' (es una columna con tipo de la Tabla)'}`);
+}
+
+// Ejecuta un cambio de la hoja y lo aplica de inmediato. Google acumula los cambios y los
+// aplica al final del script, así que sin flush() el error (p. ej. cambiar el formato de una
+// columna con tipo en una Tabla) saltaría fuera del try y detendría todo.
+function safe_(fn) {
+  try {
+    fn();
+    SpreadsheetApp.flush();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Formato de número sin fallar: Google no permite cambiarlo en las columnas con tipo de una Tabla
+function setFormat_(range, format) {
+  return safe_(() => range.setNumberFormat(format));
+}
+
+function columnLetter_(c) {
+  let s = '';
+  for (let n = c; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s;
+  return s;
+}
+
+// Pestaña Resumen con fórmulas QUERY (se crea solo si no existe)
+function createSummary_(ss, notas) {
+  if (ss.getSheetByName('Resumen')) return;
+  const g = sheet_('gasto');
+  const i = sheet_('ingreso');
+  const L = (ctx, f) => columnLetter_(ctx.cols[f]);
+  const range = (ctx, name) => `'${name}'!A:${columnLetter_(ctx.width)}`;
+  const sh = ss.insertSheet('Resumen');
+  sh.getRange(1, 1).setValue('Gastos por mes y macro-categoría (CAD)');
+  sh.getRange(2, 1).setFormula(
+    `=IFERROR(QUERY(${range(g, CONFIG.SHEETS.gasto.name)}, "select year(${L(g, 'fecha')}), month(${L(g, 'fecha')})+1, sum(${L(g, 'valor')}) ` +
+    `where ${L(g, 'fecha')} is not null group by year(${L(g, 'fecha')}), month(${L(g, 'fecha')})+1 pivot ${L(g, 'macroCategoria')} ` +
+    `label year(${L(g, 'fecha')}) 'Año', month(${L(g, 'fecha')})+1 'Mes'", 1), "Sin datos todavía")`);
+  sh.getRange(1, 12).setValue('Ingresos por mes (CAD)');
+  sh.getRange(2, 12).setFormula(
+    `=IFERROR(QUERY(${range(i, CONFIG.SHEETS.ingreso.name)}, "select year(${L(i, 'fecha')}), month(${L(i, 'fecha')})+1, sum(${L(i, 'valor')}) ` +
+    `where ${L(i, 'fecha')} is not null group by year(${L(i, 'fecha')}), month(${L(i, 'fecha')})+1 ` +
+    `label year(${L(i, 'fecha')}) 'Año', month(${L(i, 'fecha')})+1 'Mes', sum(${L(i, 'valor')}) 'Ingresos'", 1), "Sin datos todavía")`);
+  sh.getRange(1, 1, 1, 12).setFontWeight('bold');
+  sh.setFrozenRows(2);
+  notas.push('Creada la pestaña Resumen (la app no la modifica)');
 }
 
 // ---------- Utilidades ----------

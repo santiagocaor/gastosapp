@@ -66,6 +66,15 @@ La sincronización es **en ambos sentidos**: lo que crees, edites o borres en la
 4. Publica: *Implementar* → *Administrar implementaciones* → ✏️ editar la implementación actual → *Versión: nueva versión* → *Implementar*. Así la URL no cambia. (Si es la primera vez: *Nueva implementación* → *Aplicación web*, ejecutar como **tú**, acceso **cualquier usuario**.)
 5. En la app abre **Ajustes** (⚙️), pega la URL y pulsa *Guardar y verificar*. Debe decir “Sincronización completa”.
 
+6. **Prepara la hoja (una vez):** recarga la hoja y usa el menú **GastosApp → Preparar hoja para la app**. Sin borrar ni mover datos:
+   - crea las pestañas que falten (Registro de Gastos, Registro de Ingresos, BDGastos, BDIngresos) con sus encabezados;
+   - agrega al final las columnas que falten (Medio de pago, ID, Moneda, Monto original, Tasa CAD→COP);
+   - fija la fila de encabezados y da formato de fecha y número;
+   - pone listas desplegables en modo *advertencia* donde no hay ninguna (categorías desde BDGastos/BDIngresos y medio de pago) y avisa si alguna de las tuyas *rechaza* valores;
+   - crea la pestaña **Resumen** (gastos por mes y macro-categoría, ingresos por mes) con fórmulas `QUERY`.
+
+   Se puede ejecutar de nuevo cuando quieras: lo que ya está bien no se toca.
+
 Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del script* de la app para que nadie más pueda escribir en tu hoja aunque conozca la URL.
 
 ### Cómo funciona
