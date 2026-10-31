@@ -33,7 +33,9 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Los presupuestos quedan fijos en la moneda en que los edites.
 - 📈 **Estadísticas**
   - Periodos: últimos 7 días, mes, año y todo el historial.
-  - Comparación real con el periodo anterior equivalente, ingresos, ahorro neto y ritmo de gasto diario.
+  - Ingresos, ahorro neto y ritmo de gasto diario del periodo.
+  - **Comparado con antes:** ingresos, gastos y ahorro neto frente al periodo anterior equivalente (mes pasado hasta el mismo día, mismo periodo del año anterior...), y cada macro-categoría con barras de ahora vs. antes y su variación en dinero y %.
+  - **Tasa de ahorro** de los últimos 12 meses: (ingresos − gastos) ÷ ingresos, con el promedio; los meses en que gastaste más de lo que entró van hacia abajo en rojo.
   - Donut por categoría, barras de ingresos vs. gastos de los últimos 6 meses y top 5 de conceptos.
 - 🧾 **Movimientos**
   - Todo el historial con buscador (concepto, nota o categoría, sin importar tildes).

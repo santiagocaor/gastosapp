@@ -636,6 +636,23 @@
           </div>
         </div>
 
+        <!-- Comparación con el periodo anterior -->
+        <div id="statCompareCard" class="hidden flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md gap-space-sm">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="material-symbols-outlined text-secondary text-[22px]">compare_arrows</span>
+              <h2 class="font-headline-sm text-on-surface">Comparado con antes</h2>
+            </div>
+            <div class="flex items-center gap-3 text-[11px] text-on-surface-variant shrink-0">
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-primary"></span>Ahora</span>
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-outline-variant"></span>Antes</span>
+            </div>
+          </div>
+          <p id="statCompareLabel" class="text-[11px] text-on-surface-variant -mt-1"></p>
+          <div id="statCompareTotals" class="grid grid-cols-3 gap-2"></div>
+          <div id="statCompareMacros" class="flex flex-col gap-2.5 pt-1"></div>
+        </div>
+
         <!-- Donut por categorías -->
         <div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md gap-space-md">
           <div class="flex items-center gap-2">
@@ -667,6 +684,19 @@
             </div>
           </div>
           <div id="statMonthlyBars" class="flex items-end gap-1 pt-2"></div>
+        </div>
+
+        <!-- Tasa de ahorro por mes -->
+        <div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md gap-space-sm">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-secondary text-[22px]">savings</span>
+              <h2 class="font-headline-sm text-on-surface">Tasa de ahorro</h2>
+            </div>
+            <span id="statSavingsAvg" class="text-[11px] text-on-surface-variant text-right"></span>
+          </div>
+          <p class="text-[11px] text-on-surface-variant -mt-1">Parte de los ingresos de cada mes que no se gastó: (ingresos − gastos) ÷ ingresos. Últimos 12 meses.</p>
+          <div id="statSavingsBars" class="relative flex gap-0.5 pt-1"></div>
         </div>
 
         <!-- Top conceptos -->
