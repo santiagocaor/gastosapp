@@ -37,7 +37,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Donut por categoría, barras de ingresos vs. gastos de los últimos 6 meses y top 5 de conceptos.
 - 🧾 **Movimientos**
   - Todo el historial con buscador (concepto, nota o categoría, sin importar tildes).
-  - Filtros por tipo (gastos/ingresos), categoría, medio de pago y periodo (mes elegido o todo), con totales de lo filtrado.
+  - Filtros por tipo (gastos/ingresos), categoría, medio de pago, **concepto** (se ajusta a la categoría elegida) y periodo (mes elegido o todo), con totales de lo filtrado.
   - Agrupado por mes con el neto de cada uno; toca un movimiento para editarlo.
 - 💰 **Presupuesto**
   - Límites mensuales editables en línea por macro-categoría, estado de cada uno y proyección de cierre de mes.

@@ -1125,7 +1125,7 @@ const ui = {
   categorySearch: '',
   converterOpen: false,
   taxOpen: false,
-  mov: { q: '', type: 'all', cat: 'all', period: 'mes' } // filtros de la pestaña Movimientos
+  mov: { q: '', type: 'all', cat: 'all', concept: 'all', period: 'mes' } // filtros de la pestaña Movimientos
 };
 
 // Estado del formulario de registro
@@ -1487,36 +1487,6 @@ function renderDashboard() {
   else if (b.isCurrent) remText = `Quedan ${state.formatMoney(b.rem)} para ${b.daysLeft} día${b.daysLeft === 1 ? '' : 's'}`;
   else remText = `Sobraron ${state.formatMoney(b.rem)} ese mes`;
   setText('budgetRemainingText', remText);
-
-  setText('dashChipsMonth', monthLabel(key));
-
-  // Chips horizontales por macro-categoría
-  const chips = document.getElementById('dashCategoryChips');
-  if (chips) {
-    const macroTotals = state.macroTotals(state.gastosEntre(...state.monthBounds(key)));
-    const totalSpent = totalGastos || 1;
-
-    chips.innerHTML = macroList().map(macro => {
-      const spent = macroTotals[macro] || 0;
-      const percent = Math.round((spent / totalSpent) * 100);
-      const conf = macroConf(macro);
-
-      return `
-        <button type="button" data-action="goto" data-view="presupuestos" class="flex items-center gap-2.5 p-2.5 pr-3.5 bg-surface-container-lowest rounded-xl shadow-xs shrink-0 min-w-[155px] text-left hover:bg-surface-container-low transition-all active:scale-95">
-          <div class="w-9 h-9 rounded-lg bg-secondary-container/40 flex items-center justify-center text-secondary shrink-0">
-            <span class="material-symbols-outlined text-[20px]">${conf.icon}</span>
-          </div>
-          <div class="flex flex-col min-w-0">
-            <span class="text-body-sm font-semibold text-on-surface truncate">${escapeHtml(macro)}</span>
-            <div class="flex items-center gap-1.5">
-              <span class="text-label-md text-secondary font-bold">${percent}%</span>
-              <span class="text-body-sm text-on-surface-variant whitespace-nowrap">${state.formatMoney(spent, { compact: true })}</span>
-            </div>
-          </div>
-        </button>
-      `;
-    }).join('');
-  }
 }
 
 function movementRow(m) {
@@ -1608,6 +1578,56 @@ function initMovementsFilters() {
     fillMovementCategories();
     cat.addEventListener('change', () => { ui.mov.cat = cat.value; renderMovementsView(); });
   }
+  const concept = document.getElementById('movConcept');
+  concept?.addEventListener('change', () => { ui.mov.concept = concept.value; renderMovementsView(); });
+}
+
+// Opciones del filtro de conceptos según el tipo y la categoría elegidos: los del catálogo
+// más los que aparecen en los movimientos (p. ej. conceptos que ya no están en la hoja).
+// Valor: "g|<concepto>" para gastos e "i|<concepto>" para ingresos.
+function fillMovementConcepts() {
+  const sel = document.getElementById('movConcept');
+  if (!sel) return;
+  const f = ui.mov;
+  const kind = f.cat === 'all' ? '' : f.cat.slice(0, 1);
+  const name = f.cat.slice(2);
+  const groups = []; // [{ label, prefix, conceptos: Set }]
+  const group = (label, prefix) => {
+    let g = groups.find(x => x.label === label && x.prefix === prefix);
+    if (!g) groups.push(g = { label, prefix, conceptos: new Set() });
+    return g;
+  };
+
+  if (f.type !== 'ingreso' && kind !== 'i') {
+    const cats = getCategorias();
+    const macros = kind === 'g' ? [name] : macroList();
+    macros.forEach(macro => Object.entries(cats[macro]?.subcategorias || {}).forEach(([sub, list]) => {
+      const g = group(kind === 'g' ? sub : `${macro} › ${sub}`, 'g');
+      list.forEach(c => g.conceptos.add(c));
+    }));
+    state.data.gastos
+      .filter(m => m.concepto && (kind !== 'g' || m.macroCategoria === name) && (kind !== 'm' || m.medioPago === name))
+      .forEach(m => group(kind === 'g' ? m.subcategoria : `${m.macroCategoria} › ${m.subcategoria}`, 'g').conceptos.add(m.concepto));
+  }
+  if (f.type !== 'gasto' && kind !== 'g' && kind !== 'm') {
+    const ing = ingresoCatalog();
+    const tipos = kind === 'i' ? [name] : Object.keys(ing);
+    tipos.forEach(t => (ing[t]?.conceptos || []).forEach(c => group(`Ingresos › ${t}`, 'i').conceptos.add(c)));
+    state.data.ingresos
+      .filter(m => m.concepto && (kind !== 'i' || m.tipoIngreso === name))
+      .forEach(m => group(`Ingresos › ${m.tipoIngreso}`, 'i').conceptos.add(m.concepto));
+  }
+
+  const sig = JSON.stringify(groups.map(g => [g.label, g.prefix, [...g.conceptos]]));
+  if (sel.dataset.sig !== sig) {
+    sel.dataset.sig = sig;
+    sel.innerHTML = `<option value="all">Todos los conceptos</option>` + groups
+      .filter(g => g.conceptos.size)
+      .map(g => `<optgroup label="${escapeHtml(g.label)}">${[...g.conceptos].map(c => `<option value="${escapeHtml(g.prefix + '|' + c)}">${escapeHtml(shortConcept(c))}</option>`).join('')}</optgroup>`)
+      .join('');
+  }
+  sel.value = [...sel.options].some(o => o.value === f.concept) ? f.concept : 'all';
+  f.concept = sel.value;
 }
 
 // Opciones del filtro de categorías; se regeneran si cambia el catálogo (p. ej. al sincronizar)
@@ -1639,6 +1659,7 @@ function renderMovementsView() {
   const list = document.getElementById('movList');
   if (!list) return;
   fillMovementCategories();
+  fillMovementConcepts();
   const f = ui.mov;
 
   setPillState('#movTypePills [data-type]', 'type', f.type);
@@ -1657,6 +1678,11 @@ function renderMovementsView() {
     all = all.filter(m => kind === 'g' ? m.type === 'gasto' && m.macroCategoria === name
       : kind === 'm' ? m.type === 'gasto' && m.medioPago === name
       : m.type === 'ingreso' && m.tipoIngreso === name);
+  }
+  if (f.concept !== 'all') {
+    const type = f.concept.startsWith('i|') ? 'ingreso' : 'gasto';
+    const concepto = f.concept.slice(2);
+    all = all.filter(m => m.type === type && m.concepto === concepto);
   }
   if (q) {
     all = all.filter(m => [m.concepto, shortConcept(m.concepto), m.nota, m.subcategoria, m.macroCategoria, m.tipoIngreso]
