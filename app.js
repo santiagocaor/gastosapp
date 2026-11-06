@@ -2196,11 +2196,11 @@ function monthsWindow(n) {
   return list.length ? list : [ui.viewMonth];
 }
 
-// Número corto para etiquetas de gráficas: 648, 1.3k, 2.4M
+// Número corto (ya en la moneda mostrada) para etiquetas de gráficas: 64.8, 648, 1.3k, 2.4M
 function shortNum(v) {
   const a = Math.abs(v);
   const f = (x, u) => `${(Math.round(x * 10) / 10).toString().replace(/\.0$/, '')}${u}`;
-  return a >= 1e6 ? f(v / 1e6, 'M') : a >= 1e3 ? f(v / 1e3, 'k') : String(Math.round(v));
+  return a >= 1e6 ? f(v / 1e6, 'M') : a >= 1e3 ? f(v / 1e3, 'k') : a >= 100 ? String(Math.round(v)) : f(v, '');
 }
 
 // Evolución del gasto mensual (hasta 12 meses, desde el primer registro) como línea con el valor de cada mes
@@ -2227,6 +2227,8 @@ function renderSpendingTrend() {
 
 // Gráfica de líneas suaves con eje Y, valores sobre los puntos y leyenda. series: [{ m: nombre, color, vals[] }]
 function lineChartHtml(keys, series, aria) {
+  // Los montos internos están en COP: la gráfica (eje y etiquetas) se dibuja en la moneda que se muestra, igual que el resto de la app
+  series = series.map(x => ({ ...x, cop: x.vals, vals: x.vals.map(toDisplay) }));
   // Eje Y con marcas "redondas" (1, 2, 5 × 10^n)
   const rawMax = Math.max(1, ...series.flatMap(x => x.vals));
   const mag = Math.pow(10, Math.floor(Math.log10(rawMax / 4)));
@@ -2264,7 +2266,7 @@ function lineChartHtml(keys, series, aria) {
     return `<text transform="translate(${xs[i].toFixed(1)} ${base + 14}) rotate(-25)" text-anchor="end" font-size="11" ${cur ? 'font-weight="700" fill="#1b6d24"' : 'fill="#6b7280"'}>${escapeHtml(shortMonthLabel(k))} ${k.slice(0, 4)}</text>`;
   }).join('');
   const lines = series.map(x => {
-    const dots = x.vals.map((v, i) => `<g><title>${escapeHtml(x.m)} · ${escapeHtml(monthLabel(keys[i], true))}: ${escapeHtml(state.formatMoney(v))}</title>
+    const dots = x.vals.map((v, i) => `<g><title>${escapeHtml(x.m)} · ${escapeHtml(monthLabel(keys[i], true))}: ${escapeHtml(state.formatMoney(x.cop[i]))}</title>
       <circle cx="${xs[i].toFixed(1)}" cy="${yOf(v).toFixed(1)}" r="5" fill="${x.color}" stroke="#fff" stroke-width="1.5"/></g>`).join('');
     return `<path d="${smooth(x.vals)}" fill="none" stroke="${x.color}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
   }).join('');
@@ -2382,7 +2384,7 @@ function renderMonthlyBars() {
   const data = months.map(k => ({ k, inc: state.getIngresosMes(k), exp: state.getGastosMes(k) }));
   const max = Math.max(1, ...data.map(d => Math.max(d.inc, d.exp)));
 
-  const val = shortNum;
+  const val = cop => shortNum(toDisplay(cop));
   container.innerHTML = data.map(d => `
     <div class="flex-1 flex flex-col items-center gap-1 min-w-0" title="${escapeHtml(monthLabel(d.k, true))}: ingresos ${state.formatMoney(d.inc)}, gastos ${state.formatMoney(d.exp)}">
       <div class="w-full h-32 flex items-end justify-center gap-1">
