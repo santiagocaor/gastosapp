@@ -2217,7 +2217,7 @@ function lineChartHtml(keys, series, aria) {
     </span>`).join('');
   return `<div class="overflow-x-auto"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" style="min-width: ${Math.min(W, 300)}px" role="img" aria-label="${escapeHtml(aria)}">
     ${grid}${lines}${labels}${xLabels}</svg></div>
-    <div class="flex flex-col items-center gap-1 pt-1">${legend}</div>`;
+    <div class="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-1">${legend}</div>`;
 }
 
 // Evolución por concepto: se elige la macro-categoría y qué conceptos dibujar
