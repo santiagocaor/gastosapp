@@ -2304,6 +2304,7 @@ function renderConceptTrend() {
   if (macros.length === 0) {
     select.innerHTML = '';
     chips.innerHTML = '';
+    chips.dataset.key = '';
     chart.innerHTML = `<p class="text-body-sm text-on-surface-variant text-center py-4">Aún no hay gastos registrados.</p>`;
     return;
   }
@@ -2325,13 +2326,22 @@ function renderConceptTrend() {
   if (conceptTrend.picked.size === 0 && !conceptTrend.touched) conceptTrend.picked = new Set(concepts.slice(0, 3));
   const colorOf = c => CONCEPT_COLORS[concepts.indexOf(c) % CONCEPT_COLORS.length];
 
-  const allOn = concepts.every(c => conceptTrend.picked.has(c));
-  chips.innerHTML = `<button type="button" data-concept-all class="px-2.5 py-1 rounded-full text-[12px] font-medium border border-outline-variant text-on-surface-variant">${allOn ? 'Ninguno' : 'Todos'}</button>` +
-    concepts.map(c => {
-      const on = conceptTrend.picked.has(c);
-      return `<button type="button" data-concept="${escapeHtml(c)}" aria-pressed="${on}" class="px-2.5 py-1 rounded-full text-[12px] font-medium border flex items-center gap-1.5 ${on ? 'bg-surface-container-low text-on-surface border-outline' : 'text-on-surface-variant border-outline-variant'}">
-        <span class="w-2.5 h-2.5 rounded-full" style="background:${on ? colorOf(c) : '#c4c6d0'}"></span>${escapeHtml(c)}</button>`;
-    }).join('');
+  // Lista desplegable con casillas; solo se reconstruye si cambió la categoría o sus conceptos (así no pierde el scroll ni se cierra)
+  const listKey = conceptTrend.macro + '|' + concepts.join('|');
+  if (chips.dataset.key !== listKey) {
+    chips.dataset.key = listKey;
+    chips.innerHTML = concepts.map(c => `
+      <label class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-surface-container-low text-body-sm text-on-surface">
+        <input type="checkbox" data-concept="${escapeHtml(c)}" class="shrink-0 w-4 h-4">
+        <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${colorOf(c)}"></span>
+        <span class="min-w-0 break-words">${escapeHtml(c)}</span>
+      </label>`).join('');
+  }
+  chips.querySelectorAll('input[data-concept]').forEach(i => { i.checked = conceptTrend.picked.has(i.dataset.concept); });
+  const nPicked = conceptTrend.picked.size;
+  setText('statConceptSummary', nPicked === 0 ? 'Elige conceptos' : nPicked === concepts.length ? `Todos (${nPicked})` : nPicked === 1 ? [...conceptTrend.picked][0] : `${nPicked} de ${concepts.length} conceptos`);
+  const allBtn = document.getElementById('statConceptAll');
+  if (allBtn) allBtn.textContent = nPicked === concepts.length ? 'Ninguno' : 'Todos';
 
   const series = concepts.filter(c => conceptTrend.picked.has(c)).map(c => ({
     m: c,
@@ -2349,17 +2359,17 @@ function initConceptTrend() {
     conceptTrend.touched = false;
     renderConceptTrend();
   });
-  document.getElementById('statConceptChips')?.addEventListener('click', e => {
-    const btn = e.target.closest('button');
-    if (!btn) return;
+  document.getElementById('statConceptChips')?.addEventListener('change', e => {
+    const box = e.target.closest('input[data-concept]');
+    if (!box) return;
     conceptTrend.touched = true;
-    if (btn.hasAttribute('data-concept-all')) {
-      const all = [...document.querySelectorAll('#statConceptChips [data-concept]')].map(b => b.dataset.concept);
-      conceptTrend.picked = all.every(c => conceptTrend.picked.has(c)) ? new Set() : new Set(all);
-    } else {
-      const c = btn.dataset.concept;
-      conceptTrend.picked.has(c) ? conceptTrend.picked.delete(c) : conceptTrend.picked.add(c);
-    }
+    box.checked ? conceptTrend.picked.add(box.dataset.concept) : conceptTrend.picked.delete(box.dataset.concept);
+    renderConceptTrend();
+  });
+  document.getElementById('statConceptAll')?.addEventListener('click', () => {
+    const all = [...document.querySelectorAll('#statConceptChips [data-concept]')].map(b => b.dataset.concept);
+    conceptTrend.touched = true;
+    conceptTrend.picked = all.every(c => conceptTrend.picked.has(c)) ? new Set() : new Set(all);
     renderConceptTrend();
   });
 }

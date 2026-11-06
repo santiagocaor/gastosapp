@@ -710,7 +710,16 @@
           </label>
           <div>
             <span class="text-[11px] text-on-surface-variant block mb-1">Conceptos</span>
-            <div id="statConceptChips" class="flex flex-wrap gap-1.5"></div>
+            <details id="statConceptDetails" class="group rounded-lg border border-outline-variant bg-surface">
+              <summary class="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer list-none text-body-sm text-on-surface [&::-webkit-details-marker]:hidden">
+                <span id="statConceptSummary" class="truncate"></span>
+                <span class="material-symbols-outlined text-[20px] transition-transform group-open:rotate-180">expand_more</span>
+              </summary>
+              <div class="border-t border-outline-variant">
+                <button type="button" id="statConceptAll" class="w-full text-left px-3 py-2 text-[12px] font-semibold text-secondary hover:bg-surface-container-low">Todos</button>
+                <div id="statConceptChips" class="max-h-56 overflow-y-auto"></div>
+              </div>
+            </details>
           </div>
           <div id="statConceptLine"></div>
         </div>
