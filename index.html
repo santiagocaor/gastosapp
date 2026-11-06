@@ -698,6 +698,23 @@
           <div id="statSpendLine"></div>
         </div>
 
+        <!-- Evolución por concepto -->
+        <div id="statConceptCard" class="flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md gap-space-sm">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-secondary text-[22px]">timeline</span>
+            <h2 class="font-headline-sm text-on-surface">Evolución por concepto</h2>
+          </div>
+          <label class="flex flex-col gap-1">
+            <span class="text-[11px] text-on-surface-variant">Categoría</span>
+            <select id="statConceptMacro" class="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-body-sm text-on-surface"></select>
+          </label>
+          <div>
+            <span class="text-[11px] text-on-surface-variant block mb-1">Conceptos</span>
+            <div id="statConceptChips" class="flex flex-wrap gap-1.5"></div>
+          </div>
+          <div id="statConceptLine"></div>
+        </div>
+
         <!-- Top conceptos -->
         <div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md gap-space-sm mb-4">
           <div class="flex items-center gap-2">

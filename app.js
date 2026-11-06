@@ -1151,6 +1151,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSettings();
   initCategorySearch();
   initMovementsFilters();
+  initConceptTrend();
   initCurrencyConverter();
   initTaxCalculator();
   switchView(state.data.activeTab || 'inicio', { scroll: false });
@@ -2115,6 +2116,7 @@ function renderStatisticsView() {
   renderPeriodComparison(r, totalGastos, totalIngresos, macroTotals);
   renderMonthlyBars();
   renderSpendingTrend();
+  renderConceptTrend();
   renderTopConcepts(gastos, totalSpent);
 }
 
@@ -2220,6 +2222,11 @@ function renderSpendingTrend() {
     return;
   }
 
+  container.innerHTML = lineChartHtml(keys, series, 'Evolución de gastos por mes y categoría');
+}
+
+// Gráfica de líneas suaves con eje Y, valores sobre los puntos y leyenda. series: [{ m: nombre, color, vals[] }]
+function lineChartHtml(keys, series, aria) {
   // Eje Y con marcas "redondas" (1, 2, 5 × 10^n)
   const rawMax = Math.max(1, ...series.flatMap(x => x.vals));
   const mag = Math.pow(10, Math.floor(Math.log10(rawMax / 4)));
@@ -2269,9 +2276,92 @@ function renderSpendingTrend() {
     <span class="flex items-center gap-1.5 text-[12px] text-on-surface-variant">
       <span class="w-5 h-2.5 rounded-sm shrink-0" style="background:${x.color}"></span>${escapeHtml(x.m)}
     </span>`).join('');
-  container.innerHTML = `<div class="overflow-x-auto"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" style="min-width: ${Math.min(W, 300)}px" role="img" aria-label="Evolución de gastos por mes y categoría">
+  return `<div class="overflow-x-auto"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" style="min-width: ${Math.min(W, 300)}px" role="img" aria-label="${escapeHtml(aria)}">
     ${grid}${lines}${labels}${xLabels}</svg></div>
     <div class="flex flex-col items-center gap-1 pt-1">${legend}</div>`;
+}
+
+// Evolución por concepto: se elige la macro-categoría y qué conceptos dibujar
+const conceptTrend = { macro: null, picked: null, forMacro: null, touched: false };
+const CONCEPT_COLORS = ['#00342b', '#e07b00', '#2563eb', '#b91c1c', '#7c3aed', '#0f766e', '#c026d3', '#65a30d', '#0891b2', '#a16207'];
+const conceptOf = g => g.concepto || g.subcategoria || 'Sin concepto';
+
+function renderConceptTrend() {
+  const card = document.getElementById('statConceptCard');
+  if (!card) return;
+  const keys = monthsWindow(12);
+  const [from] = state.monthBounds(keys[0]);
+  const [, to] = state.monthBounds(keys[keys.length - 1]);
+  const gastos = state.gastosEntre(from, to);
+
+  // Macro-categorías con gasto en la ventana, de mayor a menor
+  const macroSum = {};
+  gastos.forEach(g => { macroSum[g.macroCategoria] = (macroSum[g.macroCategoria] || 0) + itemCOP(g); });
+  const macros = Object.keys(macroSum).filter(m => macroSum[m] > 0).sort((a, b) => macroSum[b] - macroSum[a]);
+  const select = document.getElementById('statConceptMacro');
+  const chips = document.getElementById('statConceptChips');
+  const chart = document.getElementById('statConceptLine');
+  if (macros.length === 0) {
+    select.innerHTML = '';
+    chips.innerHTML = '';
+    chart.innerHTML = `<p class="text-body-sm text-on-surface-variant text-center py-4">Aún no hay gastos registrados.</p>`;
+    return;
+  }
+  if (!macros.includes(conceptTrend.macro)) conceptTrend.macro = macros[0];
+  select.innerHTML = macros.map(m => `<option value="${escapeHtml(m)}"${m === conceptTrend.macro ? ' selected' : ''}>${escapeHtml(m)}</option>`).join('');
+
+  // Conceptos de esa categoría, de mayor a menor gasto
+  const inMacro = gastos.filter(g => g.macroCategoria === conceptTrend.macro);
+  const conceptSum = {};
+  inMacro.forEach(g => { const c = conceptOf(g); conceptSum[c] = (conceptSum[c] || 0) + itemCOP(g); });
+  const concepts = Object.keys(conceptSum).sort((a, b) => conceptSum[b] - conceptSum[a]);
+  // Al cambiar de categoría (o si lo elegido ya no existe) se vuelven a marcar los 3 que más gasto tienen
+  if (conceptTrend.forMacro !== conceptTrend.macro || !conceptTrend.picked) {
+    conceptTrend.picked = new Set(concepts.slice(0, 3));
+    conceptTrend.forMacro = conceptTrend.macro;
+  }
+  conceptTrend.picked = new Set([...conceptTrend.picked].filter(c => concepts.includes(c)));
+  // Si los datos cambiaron y ya no queda nada marcado (sin que el usuario lo haya vaciado), se vuelven a marcar los 3 principales
+  if (conceptTrend.picked.size === 0 && !conceptTrend.touched) conceptTrend.picked = new Set(concepts.slice(0, 3));
+  const colorOf = c => CONCEPT_COLORS[concepts.indexOf(c) % CONCEPT_COLORS.length];
+
+  const allOn = concepts.every(c => conceptTrend.picked.has(c));
+  chips.innerHTML = `<button type="button" data-concept-all class="px-2.5 py-1 rounded-full text-[12px] font-medium border border-outline-variant text-on-surface-variant">${allOn ? 'Ninguno' : 'Todos'}</button>` +
+    concepts.map(c => {
+      const on = conceptTrend.picked.has(c);
+      return `<button type="button" data-concept="${escapeHtml(c)}" aria-pressed="${on}" class="px-2.5 py-1 rounded-full text-[12px] font-medium border flex items-center gap-1.5 ${on ? 'bg-surface-container-low text-on-surface border-outline' : 'text-on-surface-variant border-outline-variant'}">
+        <span class="w-2.5 h-2.5 rounded-full" style="background:${on ? colorOf(c) : '#c4c6d0'}"></span>${escapeHtml(c)}</button>`;
+    }).join('');
+
+  const series = concepts.filter(c => conceptTrend.picked.has(c)).map(c => ({
+    m: c,
+    color: colorOf(c),
+    vals: keys.map(k => sumValor(inMacro.filter(g => conceptOf(g) === c && g.fecha && g.fecha.slice(0, 7) === k)))
+  }));
+  chart.innerHTML = series.length
+    ? lineChartHtml(keys, series, `Evolución de ${conceptTrend.macro} por concepto`)
+    : `<p class="text-body-sm text-on-surface-variant text-center py-4">Elige al menos un concepto.</p>`;
+}
+
+function initConceptTrend() {
+  document.getElementById('statConceptMacro')?.addEventListener('change', e => {
+    conceptTrend.macro = e.target.value;
+    conceptTrend.touched = false;
+    renderConceptTrend();
+  });
+  document.getElementById('statConceptChips')?.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    conceptTrend.touched = true;
+    if (btn.hasAttribute('data-concept-all')) {
+      const all = [...document.querySelectorAll('#statConceptChips [data-concept]')].map(b => b.dataset.concept);
+      conceptTrend.picked = all.every(c => conceptTrend.picked.has(c)) ? new Set() : new Set(all);
+    } else {
+      const c = btn.dataset.concept;
+      conceptTrend.picked.has(c) ? conceptTrend.picked.delete(c) : conceptTrend.picked.add(c);
+    }
+    renderConceptTrend();
+  });
 }
 
 // Ingresos vs gastos de hasta 6 meses que terminan en el mes seleccionado (desde el primer registro)
