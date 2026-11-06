@@ -2267,7 +2267,7 @@ function renderSpendingTrend() {
 
   const legend = series.map(x => `
     <span class="flex items-center gap-1.5 text-[12px] text-on-surface-variant">
-      <span class="w-5 h-2.5 rounded-sm shrink-0" style="background:${x.color}"></span>${escapeHtml(x.m)} (total: ${escapeHtml(state.formatMoney(x.total))})
+      <span class="w-5 h-2.5 rounded-sm shrink-0" style="background:${x.color}"></span>${escapeHtml(x.m)}
     </span>`).join('');
   container.innerHTML = `<div class="overflow-x-auto"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" style="min-width: ${Math.min(W, 300)}px" role="img" aria-label="Evolución de gastos por mes y categoría">
     ${grid}${lines}${labels}${xLabels}</svg></div>
