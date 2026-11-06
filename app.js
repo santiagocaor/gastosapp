@@ -2180,13 +2180,25 @@ function renderPeriodComparison(r, totalGastos, totalIngresos, macroTotals) {
       </div>`).join('');
 }
 
-// Tasa de ahorro de los 12 meses hasta el mes elegido: barra hacia arriba si sobró dinero,
-// hacia abajo si se gastó más de lo que entró (desde la línea de 0 %)
+// Primer mes con algún registro (gasto o ingreso); si no hay datos, el mes que se está viendo
+function firstDataMonth() {
+  const fechas = [...state.data.gastos, ...state.data.ingresos].map(x => (x.fecha || '').slice(0, 7)).filter(k => /^\d{4}-\d{2}$/.test(k));
+  return fechas.length ? fechas.reduce((a, b) => (a < b ? a : b)) : ui.viewMonth;
+}
+
+// Hasta `n` meses que terminan en el mes visto, sin pasar de atrás del primer registro
+function monthsWindow(n) {
+  const first = firstDataMonth();
+  const all = Array.from({ length: n }, (_, i) => shiftMonth(ui.viewMonth, i - (n - 1)));
+  const list = all.filter(k => k >= first);
+  return list.length ? list : [ui.viewMonth];
+}
+
+// Tasa de ahorro por mes (hasta 12, desde el primer registro) como línea con el valor de cada mes
 function renderSavingsRate() {
   const container = document.getElementById('statSavingsBars');
   if (!container) return;
-  const months = Array.from({ length: 12 }, (_, i) => shiftMonth(ui.viewMonth, i - 11));
-  const data = months.map(k => {
+  const data = monthsWindow(12).map(k => {
     const inc = state.getIngresosMes(k);
     const exp = state.getGastosMes(k);
     return { k, inc, exp, rate: inc > 0 ? Math.round(((inc - exp) / inc) * 100) : null };
@@ -2198,32 +2210,43 @@ function renderSavingsRate() {
     ? `Promedio ${Math.round(((totInc - totExp) / totInc) * 100)}% · ${withRate.length} mes${withRate.length === 1 ? '' : 'es'}`
     : 'Sin ingresos registrados');
 
-  // Escala simétrica de ±100 % (más si algún mes lo supera, con tope de ±300 %)
+  // Escala simétrica alrededor de 0 % (±100 % como mínimo, tope ±300 %)
   const span = Math.min(300, Math.max(100, ...withRate.map(d => Math.abs(d.rate))));
-  const half = 56; // alto en px de cada lado de la línea de 0 %
-  const label = 18;
-  container.innerHTML = `<div class="absolute left-0 right-0 border-t border-outline-variant pointer-events-none" style="top: ${label + half + 4}px"></div>` + data.map(d => {
-    const has = d.rate !== null;
-    const pos = has && d.rate >= 0;
-    const h = has ? Math.max(2, Math.round((Math.min(Math.abs(d.rate), span) / span) * half)) : 0;
-    const tip = has
-      ? `${monthLabel(d.k, true)}: ${d.rate}% (ingresos ${state.formatMoney(d.inc)}, gastos ${state.formatMoney(d.exp)})`
-      : `${monthLabel(d.k, true)}: sin ingresos`;
-    return `
-      <div class="flex-1 min-w-0 flex flex-col items-center" title="${escapeHtml(tip)}">
-        <span class="text-[9px] sm:text-[10px] font-semibold whitespace-nowrap ${!has ? 'text-outline' : pos ? 'text-secondary' : 'text-error'}" style="height: ${label}px; line-height: ${label}px">${has ? `${d.rate}%` : '–'}</span>
-        <div class="w-full flex justify-center items-end" style="height: ${half}px">${pos ? `<div class="w-2.5 sm:w-3 rounded-t bg-secondary" style="height: ${h}px"></div>` : ''}</div>
-        <div class="w-full flex justify-center items-start" style="height: ${half}px">${has && !pos ? `<div class="w-2.5 sm:w-3 rounded-b bg-error" style="height: ${h}px"></div>` : ''}</div>
-        <span class="text-[10px] ${d.k === ui.viewMonth ? 'text-secondary font-bold' : 'text-on-surface-variant'}">${escapeHtml(shortMonthLabel(d.k))}</span>
-      </div>`;
+  const n = data.length;
+  const W = Math.max(n * 40, 240), H = 170, top = 22, bottom = 28;
+  const mid = top + (H - top - bottom) / 2, half = (H - top - bottom) / 2;
+  const pts = data.map((d, i) => ({
+    ...d,
+    x: (i + 0.5) * (W / n),
+    y: d.rate === null ? null : mid - (Math.max(-span, Math.min(span, d.rate)) / span) * half
+  }));
+  let segs = '';
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i].y !== null && pts[i - 1].y !== null) {
+      segs += `<line x1="${pts[i - 1].x.toFixed(1)}" y1="${pts[i - 1].y.toFixed(1)}" x2="${pts[i].x.toFixed(1)}" y2="${pts[i].y.toFixed(1)}" stroke="#1b6d24" stroke-width="2" stroke-linecap="round"/>`;
+    }
+  }
+  const dots = pts.map(p => {
+    const label = escapeHtml(shortMonthLabel(p.k));
+    const cur = p.k === ui.viewMonth;
+    const axis = `<text x="${p.x.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" ${cur ? 'font-weight="700" fill="#1b6d24"' : 'fill="#6b7280"'}>${label}</text>`;
+    if (p.y === null) return axis + `<text x="${p.x.toFixed(1)}" y="${(mid - 6).toFixed(1)}" text-anchor="middle" font-size="11" fill="#9ca3af">–</text>`;
+    const neg = p.rate < 0;
+    const tip = `${monthLabel(p.k, true)}: ${p.rate}% (ingresos ${state.formatMoney(p.inc)}, gastos ${state.formatMoney(p.exp)})`;
+    return `<g><title>${escapeHtml(tip)}</title>
+      <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${neg ? '#ba1a1a' : '#1b6d24'}" stroke="#fff" stroke-width="1.5"/>
+      <text x="${p.x.toFixed(1)}" y="${(neg ? p.y + 16 : p.y - 9).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" fill="${neg ? '#ba1a1a' : '#1b6d24'}">${p.rate}%</text>${axis}</g>`;
   }).join('');
+  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="Tasa de ahorro por mes">
+    <line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="#c4c6d0" stroke-dasharray="4 3"/>
+    <text x="2" y="${mid - 3}" font-size="9" fill="#9ca3af">0%</text>${segs}${dots}</svg>`;
 }
 
-// Ingresos vs gastos de los últimos 6 meses hasta el mes seleccionado
+// Ingresos vs gastos de hasta 6 meses que terminan en el mes seleccionado (desde el primer registro)
 function renderMonthlyBars() {
   const container = document.getElementById('statMonthlyBars');
   if (!container) return;
-  const months = Array.from({ length: 6 }, (_, i) => shiftMonth(ui.viewMonth, i - 5));
+  const months = monthsWindow(6);
   const data = months.map(k => ({ k, inc: state.getIngresosMes(k), exp: state.getGastosMes(k) }));
   const max = Math.max(1, ...data.map(d => Math.max(d.inc, d.exp)));
 

@@ -35,7 +35,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Periodos: últimos 7 días, mes, año y todo el historial.
   - Ingresos, ahorro neto y ritmo de gasto diario del periodo.
   - **Comparado con antes:** ingresos, gastos y ahorro neto frente al periodo anterior equivalente (mes pasado hasta el mismo día, mismo periodo del año anterior...), y cada macro-categoría con barras de ahora vs. antes y su variación en dinero y %.
-  - **Tasa de ahorro** de los últimos 12 meses: (ingresos − gastos) ÷ ingresos, con el promedio; los meses en que gastaste más de lo que entró van hacia abajo en rojo.
+  - **Tasa de ahorro** en línea, con el valor de cada mes (máximo 12 meses, desde el primer registro): (ingresos − gastos) ÷ ingresos, con el promedio; los meses en que gastaste más de lo que entró quedan bajo la línea de 0 % en rojo. «Últimos 6 meses» también empieza en el primer registro.
   - Donut por categoría, barras de ingresos vs. gastos de los últimos 6 meses y top 5 de conceptos.
 - 🧾 **Movimientos**
   - Todo el historial con buscador (concepto, nota o categoría, sin importar tildes).
