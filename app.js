@@ -2114,7 +2114,7 @@ function renderStatisticsView() {
 
   renderPeriodComparison(r, totalGastos, totalIngresos, macroTotals);
   renderMonthlyBars();
-  renderSavingsRate();
+  renderSpendingTrend();
   renderTopConcepts(gastos, totalSpent);
 }
 
@@ -2194,52 +2194,84 @@ function monthsWindow(n) {
   return list.length ? list : [ui.viewMonth];
 }
 
-// Tasa de ahorro por mes (hasta 12, desde el primer registro) como línea con el valor de cada mes
-function renderSavingsRate() {
-  const container = document.getElementById('statSavingsBars');
-  if (!container) return;
-  const data = monthsWindow(12).map(k => {
-    const inc = state.getIngresosMes(k);
-    const exp = state.getGastosMes(k);
-    return { k, inc, exp, rate: inc > 0 ? Math.round(((inc - exp) / inc) * 100) : null };
-  });
-  const withRate = data.filter(d => d.rate !== null);
-  const totInc = withRate.reduce((a, d) => a + d.inc, 0);
-  const totExp = withRate.reduce((a, d) => a + d.exp, 0);
-  setText('statSavingsAvg', withRate.length
-    ? `Promedio ${Math.round(((totInc - totExp) / totInc) * 100)}% · ${withRate.length} mes${withRate.length === 1 ? '' : 'es'}`
-    : 'Sin ingresos registrados');
+// Número corto para etiquetas de gráficas: 648, 1.3k, 2.4M
+function shortNum(v) {
+  const a = Math.abs(v);
+  const f = (x, u) => `${(Math.round(x * 10) / 10).toString().replace(/\.0$/, '')}${u}`;
+  return a >= 1e6 ? f(v / 1e6, 'M') : a >= 1e3 ? f(v / 1e3, 'k') : String(Math.round(v));
+}
 
-  // Escala simétrica alrededor de 0 % (±100 % como mínimo, tope ±300 %)
-  const span = Math.min(300, Math.max(100, ...withRate.map(d => Math.abs(d.rate))));
-  const n = data.length;
-  const W = Math.max(n * 40, 240), H = 170, top = 22, bottom = 28;
-  const mid = top + (H - top - bottom) / 2, half = (H - top - bottom) / 2;
-  const pts = data.map((d, i) => ({
-    ...d,
-    x: (i + 0.5) * (W / n),
-    y: d.rate === null ? null : mid - (Math.max(-span, Math.min(span, d.rate)) / span) * half
-  }));
-  let segs = '';
-  for (let i = 1; i < pts.length; i++) {
-    if (pts[i].y !== null && pts[i - 1].y !== null) {
-      segs += `<line x1="${pts[i - 1].x.toFixed(1)}" y1="${pts[i - 1].y.toFixed(1)}" x2="${pts[i].x.toFixed(1)}" y2="${pts[i].y.toFixed(1)}" stroke="#1b6d24" stroke-width="2" stroke-linecap="round"/>`;
-    }
+// Evolución del gasto mensual (hasta 12 meses, desde el primer registro) como línea con el valor de cada mes
+function renderSpendingTrend() {
+  const container = document.getElementById('statSpendLine');
+  if (!container) return;
+  const keys = monthsWindow(12);
+  // Gasto de cada mes por macro-categoría; solo las categorías con gasto en la ventana
+  const perMonth = keys.map(k => state.macroTotals(state.gastosEntre(...state.monthBounds(k))));
+  const series = macroList()
+    .map(m => ({ m, color: macroConf(m).color, vals: perMonth.map(t => t[m] || 0) }))
+    .map(x => ({ ...x, total: x.vals.reduce((a, v) => a + v, 0) }))
+    .filter(x => x.total > 0)
+    .sort((a, b) => b.total - a.total);
+  const totalAll = series.reduce((a, x) => a + x.total, 0);
+  setText('statSpendAvg', `Prom. ${state.formatMoney(totalAll / keys.length, { compact: true })}/mes`);
+  if (series.length === 0) {
+    container.innerHTML = `<p class="text-body-sm text-on-surface-variant text-center py-4">Aún no hay gastos registrados.</p>`;
+    return;
   }
-  const dots = pts.map(p => {
-    const label = escapeHtml(shortMonthLabel(p.k));
-    const cur = p.k === ui.viewMonth;
-    const axis = `<text x="${p.x.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" ${cur ? 'font-weight="700" fill="#1b6d24"' : 'fill="#6b7280"'}>${label}</text>`;
-    if (p.y === null) return axis + `<text x="${p.x.toFixed(1)}" y="${(mid - 6).toFixed(1)}" text-anchor="middle" font-size="11" fill="#9ca3af">–</text>`;
-    const neg = p.rate < 0;
-    const tip = `${monthLabel(p.k, true)}: ${p.rate}% (ingresos ${state.formatMoney(p.inc)}, gastos ${state.formatMoney(p.exp)})`;
-    return `<g><title>${escapeHtml(tip)}</title>
-      <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${neg ? '#ba1a1a' : '#1b6d24'}" stroke="#fff" stroke-width="1.5"/>
-      <text x="${p.x.toFixed(1)}" y="${(neg ? p.y + 16 : p.y - 9).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" fill="${neg ? '#ba1a1a' : '#1b6d24'}">${p.rate}%</text>${axis}</g>`;
+
+  // Eje Y con marcas "redondas" (1, 2, 5 × 10^n)
+  const rawMax = Math.max(1, ...series.flatMap(x => x.vals));
+  const mag = Math.pow(10, Math.floor(Math.log10(rawMax / 4)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(st => rawMax / st <= 4) || mag * 10;
+  const max = Math.ceil(rawMax / step) * step;
+  const ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => i * step);
+
+  const n = keys.length;
+  const left = 38, right = 14, top = 30, bottom = 46;
+  const slot = 46, W = left + right + Math.max(n * slot, 230), H = 210;
+  const pw = W - left - right, base = H - bottom, ph = base - top;
+  const xs = keys.map((_, i) => left + (i + 0.5) * (pw / n));
+  const yOf = v => base - (v / max) * ph;
+
+  // Curva suave (Catmull-Rom → Bézier) sin salirse del área de la gráfica
+  const clampY = y => Math.max(top, Math.min(base, y));
+  const smooth = vals => {
+    const pts = vals.map((v, i) => ({ x: xs[i], y: yOf(v) }));
+    let d = `M${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      const c1y = clampY(p1.y + (p2.y - p0.y) / 6), c2y = clampY(p2.y - (p3.y - p1.y) / 6);
+      d += ` C${(p1.x + (p2.x - p1.x) / 3).toFixed(1)} ${c1y.toFixed(1)} ${(p2.x - (p2.x - p1.x) / 3).toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+    return d;
+  };
+
+  const grid = ticks.map(t => {
+    const y = yOf(t);
+    return `<line x1="${left}" y1="${y.toFixed(1)}" x2="${W - right}" y2="${y.toFixed(1)}" stroke="${t === 0 ? '#c4c6d0' : '#e8ecf4'}"/>
+      <text x="${left - 6}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="#6b7280">${escapeHtml(shortNum(t))}</text>`;
   }).join('');
-  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" role="img" aria-label="Tasa de ahorro por mes">
-    <line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="#c4c6d0" stroke-dasharray="4 3"/>
-    <text x="2" y="${mid - 3}" font-size="9" fill="#9ca3af">0%</text>${segs}${dots}</svg>`;
+  const xLabels = keys.map((k, i) => {
+    const cur = k === ui.viewMonth;
+    return `<text transform="translate(${xs[i].toFixed(1)} ${base + 14}) rotate(-25)" text-anchor="end" font-size="11" ${cur ? 'font-weight="700" fill="#1b6d24"' : 'fill="#6b7280"'}>${escapeHtml(shortMonthLabel(k))} ${k.slice(0, 4)}</text>`;
+  }).join('');
+  const lines = series.map(x => {
+    const dots = x.vals.map((v, i) => `<g><title>${escapeHtml(x.m)} · ${escapeHtml(monthLabel(keys[i], true))}: ${escapeHtml(state.formatMoney(v))}</title>
+      <circle cx="${xs[i].toFixed(1)}" cy="${yOf(v).toFixed(1)}" r="5" fill="${x.color}" stroke="#fff" stroke-width="1.5"/></g>`).join('');
+    return `<path d="${smooth(x.vals)}" fill="none" stroke="${x.color}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+  }).join('');
+  // Valores encima de los puntos (después de las líneas para que queden visibles)
+  const labels = series.map(x => x.vals.map((v, i) => v > 0
+    ? `<text x="${xs[i].toFixed(1)}" y="${(yOf(v) - 9).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="${x.color}" stroke="#fff" stroke-width="3" paint-order="stroke">${escapeHtml(shortNum(v))}</text>` : '').join('')).join('');
+
+  const legend = series.map(x => `
+    <span class="flex items-center gap-1.5 text-[12px] text-on-surface-variant">
+      <span class="w-5 h-2.5 rounded-sm shrink-0" style="background:${x.color}"></span>${escapeHtml(x.m)} (total: ${escapeHtml(state.formatMoney(x.total))})
+    </span>`).join('');
+  container.innerHTML = `<div class="overflow-x-auto"><svg viewBox="0 0 ${W} ${H}" class="w-full h-auto" style="min-width: ${Math.min(W, 300)}px" role="img" aria-label="Evolución de gastos por mes y categoría">
+    ${grid}${lines}${labels}${xLabels}</svg></div>
+    <div class="flex flex-col items-center gap-1 pt-1">${legend}</div>`;
 }
 
 // Ingresos vs gastos de hasta 6 meses que terminan en el mes seleccionado (desde el primer registro)
@@ -2250,11 +2282,18 @@ function renderMonthlyBars() {
   const data = months.map(k => ({ k, inc: state.getIngresosMes(k), exp: state.getGastosMes(k) }));
   const max = Math.max(1, ...data.map(d => Math.max(d.inc, d.exp)));
 
+  const val = shortNum;
   container.innerHTML = data.map(d => `
     <div class="flex-1 flex flex-col items-center gap-1 min-w-0" title="${escapeHtml(monthLabel(d.k, true))}: ingresos ${state.formatMoney(d.inc)}, gastos ${state.formatMoney(d.exp)}">
-      <div class="w-full h-28 flex items-end justify-center gap-0.5">
-        <div class="w-2.5 sm:w-3 rounded-t bg-secondary-fixed-dim transition-all duration-500" style="height: ${(d.inc / max) * 100}%"></div>
-        <div class="w-2.5 sm:w-3 rounded-t bg-primary transition-all duration-500" style="height: ${(d.exp / max) * 100}%"></div>
+      <div class="w-full h-32 flex items-end justify-center gap-1">
+        <div class="flex flex-col items-center justify-end h-full min-w-0" style="width: 46%">
+          <span class="text-[9px] sm:text-[10px] font-semibold text-secondary whitespace-nowrap">${d.inc > 0 ? escapeHtml(val(d.inc)) : ''}</span>
+          <div class="w-full max-w-[14px] rounded-t bg-secondary-fixed-dim transition-all duration-500" style="height: ${(d.inc / max) * 80}%"></div>
+        </div>
+        <div class="flex flex-col items-center justify-end h-full min-w-0" style="width: 46%">
+          <span class="text-[9px] sm:text-[10px] font-semibold text-primary whitespace-nowrap">${d.exp > 0 ? escapeHtml(val(d.exp)) : ''}</span>
+          <div class="w-full max-w-[14px] rounded-t bg-primary transition-all duration-500" style="height: ${(d.exp / max) * 80}%"></div>
+        </div>
       </div>
       <span class="text-[11px] ${d.k === ui.viewMonth ? 'text-secondary font-bold' : 'text-on-surface-variant'}">${escapeHtml(shortMonthLabel(d.k))}</span>
     </div>

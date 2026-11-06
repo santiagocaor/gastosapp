@@ -686,17 +686,16 @@
           <div id="statMonthlyBars" class="flex items-end gap-1 pt-2"></div>
         </div>
 
-        <!-- Tasa de ahorro por mes -->
+        <!-- Evolución de gastos -->
         <div class="flex flex-col bg-surface-container-lowest rounded-xl p-space-md shadow-md gap-space-sm">
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-secondary text-[22px]">savings</span>
-              <h2 class="font-headline-sm text-on-surface">Tasa de ahorro</h2>
+              <span class="material-symbols-outlined text-secondary text-[22px]">show_chart</span>
+              <h2 class="font-headline-sm text-on-surface">Evolución de gastos</h2>
             </div>
-            <span id="statSavingsAvg" class="text-[11px] text-on-surface-variant text-right"></span>
+            <span id="statSpendAvg" class="text-[11px] text-on-surface-variant text-right"></span>
           </div>
-          <p class="text-[11px] text-on-surface-variant -mt-1">Parte de los ingresos de cada mes que no se gastó: (ingresos − gastos) ÷ ingresos. Desde que empezaste a registrar (máximo 12 meses).</p>
-          <div id="statSavingsBars" class="relative flex gap-0.5 pt-1"></div>
+          <div id="statSpendLine"></div>
         </div>
 
         <!-- Top conceptos -->
