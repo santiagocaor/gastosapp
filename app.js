@@ -2113,73 +2113,10 @@ function renderStatisticsView() {
       }).join('');
   }
 
-  renderPeriodComparison(r, totalGastos, totalIngresos, macroTotals);
   renderMonthlyBars();
   renderSpendingTrend();
   renderConceptTrend();
   renderTopConcepts(gastos, totalSpent);
-}
-
-// Chip de diferencia: flecha + monto + %. `goodWhenUp` dice si subir es bueno (ingresos, ahorro) o malo (gastos)
-function diffChip(now, before, goodWhenUp) {
-  const diff = now - before;
-  if (Math.abs(diff) < 0.5) return `<span class="text-[11px] text-on-surface-variant">Sin cambio</span>`;
-  const up = diff > 0;
-  const pct = before > 0 ? Math.round(Math.abs(diff / before) * 100) : null;
-  return `<span class="inline-flex items-center gap-0.5 text-[11px] font-semibold ${up === goodWhenUp ? 'text-secondary' : 'text-error'} whitespace-nowrap">
-      <span class="material-symbols-outlined text-[14px]">${up ? 'arrow_upward' : 'arrow_downward'}</span>${state.formatMoney(Math.abs(diff), { compact: true })}${pct !== null ? ` · ${pct}%` : ''}
-    </span>`;
-}
-
-// Ingresos, gastos, neto y cada macro-categoría contra el periodo anterior equivalente
-function renderPeriodComparison(r, totalGastos, totalIngresos, macroTotals) {
-  const card = document.getElementById('statCompareCard');
-  if (!card) return;
-  const show = ui.statsPeriod !== 'total' && r.prevStart !== undefined;
-  card.classList.toggle('hidden', !show);
-  if (!show) return;
-
-  const prevGastosList = state.gastosEntre(r.prevStart, r.prevEnd);
-  const prevGastos = sumValor(prevGastosList);
-  const prevIngresos = sumValor(state.ingresosEntre(r.prevStart, r.prevEnd));
-  const prevMacro = state.macroTotals(prevGastosList);
-  setText('statCompareLabel', `${r.label} frente a ${r.prevLabel}`.replace(' a el ', ' al '));
-
-  const tile = (label, now, before, goodWhenUp) => `
-    <div class="bg-surface-container-low rounded-lg p-2 min-w-0" title="${escapeHtml(label)}: ahora ${state.formatMoney(now)}, antes ${state.formatMoney(before)}">
-      <span class="text-[11px] text-on-surface-variant block">${label}</span>
-      <span class="text-body-sm font-bold text-on-surface block truncate">${state.formatMoney(now, { compact: true })}</span>
-      <span class="text-[10px] text-on-surface-variant block truncate">antes ${state.formatMoney(before, { compact: true })}</span>
-      ${diffChip(now, before, goodWhenUp)}
-    </div>`;
-  document.getElementById('statCompareTotals').innerHTML =
-    tile('Ingresos', totalIngresos, prevIngresos, true) +
-    tile('Gastos', totalGastos, prevGastos, false) +
-    tile('Ahorro neto', totalIngresos - totalGastos, prevIngresos - prevGastos, true);
-
-  // Macro-categorías con gasto en alguno de los dos periodos; primero las que más cambiaron
-  const rows = macroList()
-    .map(m => ({ m, now: macroTotals[m] || 0, before: prevMacro[m] || 0 }))
-    .filter(x => x.now > 0 || x.before > 0)
-    .sort((a, b) => Math.abs(b.now - b.before) - Math.abs(a.now - a.before));
-  const max = Math.max(1, ...rows.map(x => Math.max(x.now, x.before)));
-  const bar = (v, cls) => `<div class="h-1.5 rounded-full ${cls}" style="width: ${v > 0 ? Math.max((v / max) * 100, 1) : 0}%"></div>`;
-  document.getElementById('statCompareMacros').innerHTML = rows.length === 0
-    ? `<p class="text-body-sm text-on-surface-variant text-center py-2">Sin gastos en ninguno de los dos periodos.</p>`
-    : rows.map(x => `
-      <div class="space-y-1" title="${escapeHtml(x.m)}: ahora ${state.formatMoney(x.now)}, antes ${state.formatMoney(x.before)}">
-        <div class="flex items-center justify-between gap-2 text-body-sm">
-          <span class="flex items-center gap-1.5 min-w-0">
-            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: ${macroConf(x.m).color}"></span>
-            <span class="text-on-surface font-medium truncate">${escapeHtml(x.m)}</span>
-          </span>
-          <span class="flex items-center gap-2 shrink-0">
-            <span class="text-on-surface font-semibold">${state.formatMoney(x.now, { compact: true })}</span>
-            ${x.before > 0 ? diffChip(x.now, x.before, /^(ahorro|inversion)/.test(normalizeText(x.m))) :`<span class="text-[11px] font-semibold text-on-surface-variant">Nuevo</span>`}
-          </span>
-        </div>
-        <div class="flex flex-col gap-0.5">${bar(x.now, 'bg-primary')}${bar(x.before, 'bg-outline-variant')}</div>
-      </div>`).join('');
 }
 
 // Primer mes con algún registro (gasto o ingreso); si no hay datos, el mes que se está viendo
