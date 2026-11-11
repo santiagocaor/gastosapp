@@ -286,6 +286,9 @@ const CUENTAS_NOMBRES = [
   'Efectivo'
 ];
 
+// Contraparte de los ajustes de saldo (se guardan como transferencias; no es una cuenta)
+const AJUSTE_SALDO = 'Ajuste de saldo';
+
 const TIPOS_CUENTA = {
   debito: { label: 'Débito', icon: 'account_balance' },
   credito: { label: 'Crédito', icon: 'credit_card' },
@@ -583,6 +586,23 @@ class AppState {
       if (same(t.cuentaDestino)) push('entrada', t, credit ? -1 : 1);
     });
     return out.sort((a, b) => sortMovements(a.item, b.item));
+  }
+
+  // Totales en CAD de las cuentas activas: { disponible, deuda, neto }
+  accountsTotals() {
+    let disponible = 0;
+    let deuda = 0;
+    this.accounts().forEach(a => {
+      const b = this.accountBalance(a.nombre);
+      if (a.tipo === 'credito') deuda += b; else disponible += b;
+    });
+    const r = n => Math.round(n * 100) / 100;
+    return { disponible: r(disponible), deuda: r(deuda), neto: r(disponible - deuda) };
+  }
+
+  // Gastos e ingresos sin cuenta (registrados antes de las cuentas): no cuentan en los saldos
+  movementsWithoutAccount() {
+    return this.data.gastos.filter(g => !g.cuenta).length + this.data.ingresos.filter(i => !i.cuenta).length;
   }
 
   // Saldo en CAD: lo disponible en débito/efectivo, lo que se debe en crédito
@@ -1331,6 +1351,8 @@ document.addEventListener('DOMContentLoaded', () => {
   processRecurring();
   backgroundSync();
   registerServiceWorker();
+  setTimeout(checkForUpdate, 3000);
+  document.getElementById('updateBannerBtn')?.addEventListener('click', applyUpdate);
 });
 
 window.addEventListener('online', () => backgroundSync({ force: true }));
@@ -1338,8 +1360,43 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     processRecurring();
     backgroundSync();
+    checkForUpdate();
   }
 });
+
+// --------------------------------------------------------
+// Aviso de versión nueva: compara la marca (ETag) del app.js que está corriendo con la del
+// publicado. No hay que numerar versiones: cada publicación en GitHub Pages cambia la marca.
+// --------------------------------------------------------
+let lastUpdateCheck = 0;
+const versionTag = res => res && res.ok ? (res.headers.get('etag') || res.headers.get('last-modified') || '') : '';
+
+async function checkForUpdate() {
+  if (!location.protocol.startsWith('http') || !navigator.onLine) return;
+  if (Date.now() - lastUpdateCheck < 60 * 1000) return;
+  lastUpdateCheck = Date.now();
+  try {
+    // El que está corriendo: la copia guardada en la caché del navegador (con la que se cargó)
+    if (!checkForUpdate.running) checkForUpdate.running = versionTag(await fetch('app.js', { cache: 'force-cache' }));
+    const published = versionTag(await fetch('app.js', { method: 'HEAD', cache: 'no-store' }));
+    const isNew = !!(checkForUpdate.running && published && published !== checkForUpdate.running);
+    document.getElementById('updateBanner')?.classList.toggle('hidden', !isNew);
+  } catch (e) {
+    // Sin conexión o sin cabeceras: no se muestra nada
+  }
+}
+
+// Descarga de nuevo la página y sus archivos (saltándose la caché) y recarga
+async function applyUpdate() {
+  const btn = document.getElementById('updateBannerBtn');
+  if (btn) btn.textContent = 'Actualizando…';
+  try {
+    await Promise.all(['./', 'index.html', 'app.js', 'styles.css'].map(u => fetch(u, { cache: 'reload' }).catch(() => null)));
+    const reg = await navigator.serviceWorker?.getRegistration?.();
+    await reg?.update?.();
+  } catch (e) { /* se recarga igual */ }
+  location.reload();
+}
 
 // Sincronización silenciosa: al abrir la app, al volver a ella y al recuperar la conexión.
 // Con el script v2 trae también los cambios hechos en la hoja o en otro dispositivo.
@@ -1486,6 +1543,7 @@ function initActions() {
         renderAccountsView();
         break;
       case 'save-account-start': saveAccountStart(d.account); break;
+      case 'adjust-account': adjustAccount(d.account); break;
       case 'open-transfer': openTransferModal(d.account); break;
       case 'save-transfer': saveTransfer(); break;
       case 'delete-transfer': deleteItem('transferencia', d.id); break;
@@ -1567,8 +1625,15 @@ function updateBalance() {
     balEl.textContent = '••••••••';
     if (eye) eye.textContent = 'visibility_off';
   } else {
-    balEl.textContent = state.formatMoney(state.getBalanceTotal());
+    // El mismo total que la pestaña Cuentas (siempre en CAD, como las cuentas)
+    balEl.textContent = formatCurrency(state.accountsTotals().neto, 'CAD');
     if (eye) eye.textContent = 'visibility';
+  }
+  const sinCuenta = state.movementsWithoutAccount();
+  const note = document.getElementById('balanceNote');
+  if (note) {
+    note.textContent = sinCuenta > 0 ? `${sinCuenta} movimiento${sinCuenta === 1 ? '' : 's'} sin cuenta no se incluye${sinCuenta === 1 ? '' : 'n'}` : '';
+    note.classList.toggle('hidden', sinCuenta === 0);
   }
 }
 
@@ -1982,17 +2047,18 @@ function accountRowsHtml(acc) {
     const shown = credit ? -signed : signed; // en crédito, pagar (reduce deuda) se ve en positivo
     const title = kind === 'gasto' ? shortConcept(item.concepto) || item.subcategoria
       : kind === 'ingreso' ? shortConcept(item.concepto) || item.tipoIngreso
+      : item.cuentaOrigen === AJUSTE_SALDO || item.cuentaDestino === AJUSTE_SALDO ? AJUSTE_SALDO
       : kind === 'salida' ? `Transferencia a ${accountShortName(item.cuentaDestino)}`
       : `Transferencia de ${accountShortName(item.cuentaOrigen)}`;
     const isTransfer = kind === 'salida' || kind === 'entrada';
     const del = isTransfer
-      ? `<button type="button" data-action="delete-transfer" data-id="${escapeHtml(item.id)}" aria-label="Eliminar transferencia" class="p-1 rounded-full text-on-surface-variant hover:text-error"><span class="material-symbols-outlined text-[16px]">delete</span></button>`
+      ? `<button type="button" data-action="delete-transfer" data-id="${escapeHtml(item.id)}" aria-label="Eliminar" class="p-1 rounded-full text-on-surface-variant hover:text-error"><span class="material-symbols-outlined text-[16px]">delete</span></button>`
       : '';
     const pending = item.synced === false && state.data.googleScriptUrl ? `<span class="material-symbols-outlined text-[13px] text-outline align-middle" title="Pendiente de enviar a Google Sheets">cloud_off</span>` : '';
     return `
       <div class="flex items-center justify-between gap-2 py-1.5 border-t border-slate-100 ${isTransfer ? '' : 'cursor-pointer'}" ${isTransfer ? '' : `role="button" data-action="edit" data-type="${kind}" data-id="${escapeHtml(item.id)}"`}>
         <span class="flex flex-col min-w-0">
-          <span class="text-body-sm text-on-surface truncate">${isTransfer ? '<span class="material-symbols-outlined text-[14px] align-middle text-outline">swap_horiz</span> ' : ''}${escapeHtml(title)} ${pending}</span>
+          <span class="text-body-sm text-on-surface truncate">${isTransfer ? `<span class="material-symbols-outlined text-[14px] align-middle text-outline">${title === AJUSTE_SALDO ? 'tune' : 'swap_horiz'}</span> ` : ''}${escapeHtml(title)} ${pending}</span>
           <span class="text-[11px] text-on-surface-variant">${escapeHtml(formatDisplayDate(item.fecha))}${item.nota ? ` · ${escapeHtml(item.nota)}` : ''}</span>
         </span>
         <span class="flex items-center gap-1 shrink-0">
@@ -2001,7 +2067,8 @@ function accountRowsHtml(acc) {
         </span>
       </div>`;
   }).join('');
-  const since = isIsoDate(acc.fecha) ? `desde el ${formatDisplayDate(acc.fecha)}` : 'desde el primer registro';
+  const fd = isIsoDate(acc.fecha) ? formatDisplayDate(acc.fecha) : '';
+  const since = !fd ? 'desde el primer registro' : /^(hoy|ayer)$/i.test(fd) ? `desde ${fd.toLowerCase()}` : `desde el ${fd}`;
   return `
     <div class="bg-surface-container-lowest rounded-xl shadow-xs">
       ${head}
@@ -2014,6 +2081,14 @@ function accountRowsHtml(acc) {
             <button type="button" data-action="save-account-start" data-account="${escapeHtml(acc.nombre)}" class="h-9 px-3 rounded-lg bg-primary text-on-primary text-label-md font-semibold">Guardar</button>
           </div>
           <p class="text-[11px] text-on-surface-variant">${credit ? 'Lo que debes en la tarjeta' : 'Lo que hay en la cuenta'} ese día, antes de los movimientos de esa fecha. Desde ahí suman y restan los movimientos registrados en la app.</p>
+        </div>
+        <div class="bg-surface-container-low rounded-lg p-2.5 space-y-2">
+          <span class="text-[12px] font-semibold text-on-surface block">${credit ? 'Ajustar a la deuda real' : 'Ajustar al saldo real'} (CAD)</span>
+          <div class="flex items-center gap-2">
+            <input type="number" inputmode="decimal" step="any" data-account-real="${escapeHtml(acc.nombre)}" placeholder="${Math.abs(bal).toFixed(2)}" class="flex-1 min-w-0 h-9 px-2 rounded-lg bg-surface-container-lowest border border-slate-200 text-body-sm" aria-label="${credit ? 'Deuda real' : 'Saldo real'}"/>
+            <button type="button" data-action="adjust-account" data-account="${escapeHtml(acc.nombre)}" class="h-9 px-3 rounded-lg bg-primary text-on-primary text-label-md font-semibold">Ajustar</button>
+          </div>
+          <p class="text-[11px] text-on-surface-variant">Escribe ${credit ? 'lo que debes hoy según el banco' : 'el saldo de hoy según el banco'}. La diferencia queda como «${AJUSTE_SALDO}» con fecha de hoy: no cuenta como gasto ni ingreso y puedes borrarla.</p>
         </div>
         <div class="flex gap-2">
           <button type="button" data-action="open-transfer" data-account="${escapeHtml(acc.nombre)}" class="flex-1 h-9 rounded-lg border border-outline-variant text-label-md font-semibold text-secondary flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[18px]">swap_horiz</span>${credit ? 'Pagar tarjeta' : 'Transferir'}</button>
@@ -2032,15 +2107,10 @@ function renderAccountsView() {
   const list = document.getElementById('accountsList');
   if (!list) return;
   const accounts = state.accounts();
-  let disponible = 0;
-  let deuda = 0;
-  accounts.forEach(a => {
-    const b = state.accountBalance(a.nombre);
-    if (a.tipo === 'credito') deuda += b; else disponible += b;
-  });
+  const { disponible, deuda, neto } = state.accountsTotals();
   setText('accDisponible', formatCurrency(disponible, 'CAD'));
   setText('accDeuda', formatCurrency(deuda, 'CAD'));
-  setText('accNeto', formatCurrency(disponible - deuda, 'CAD'));
+  setText('accNeto', formatCurrency(neto, 'CAD'));
 
   // Dos bloques: débito y efectivo (lo disponible) y tarjetas de crédito (lo que se debe).
   // Dentro de cada bloque, ordenadas por titular (las compartidas, como Efectivo, al final).
@@ -2060,7 +2130,7 @@ function renderAccountsView() {
         ${b.accs.map(accountRowsHtml).join('')}
       </div>`).join('');
 
-  const sinCuenta = state.data.gastos.filter(g => !g.cuenta).length + state.data.ingresos.filter(i => !i.cuenta).length;
+  const sinCuenta = state.movementsWithoutAccount();
   const note = document.getElementById('accNote');
   if (note) {
     const parts = [];
@@ -2083,6 +2153,40 @@ function saveAccountStart(nombre) {
   state.setAccountStart(nombre, val, fechaEl?.value);
   renderAll();
   showToast(`Saldo inicial de ${accountShortName(nombre)} guardado`);
+}
+
+// Registra la diferencia entre el saldo de la app y el real como un ajuste (transferencia
+// con la contraparte "Ajuste de saldo"), de modo que el saldo de la cuenta quede igual al real
+function adjustAccount(nombre) {
+  const acc = state.account(nombre);
+  const el = document.querySelector(`[data-account-real="${CSS.escape(nombre)}"]`);
+  const real = Number(el?.value);
+  if (!acc || !el || el.value.trim() === '' || !Number.isFinite(real)) {
+    showToast(`Escribe ${acc?.tipo === 'credito' ? 'la deuda real' : 'el saldo real'}`, 'error');
+    return;
+  }
+  const actual = state.accountBalance(acc.nombre);
+  const diff = Math.round((real - actual) * 100) / 100;
+  if (Math.abs(diff) < 0.005) {
+    showToast('El saldo ya coincide; no hace falta ajustar', 'info');
+    return;
+  }
+  // Débito/efectivo: subir el saldo = entra dinero. Crédito: subir la deuda = sale de la tarjeta.
+  const entra = acc.tipo === 'credito' ? diff < 0 : diff > 0;
+  const monto = Math.abs(diff);
+  const rate = Math.round(cadRate() * 100) / 100;
+  state.addMovement('transferencia', {
+    fecha: localISODate(),
+    valor: Math.round(monto * rate),
+    moneda: 'CAD',
+    montoOriginal: monto,
+    tasa: rate,
+    cuentaOrigen: entra ? AJUSTE_SALDO : acc.nombre,
+    cuentaDestino: entra ? acc.nombre : AJUSTE_SALDO,
+    nota: `Saldo de la app ${formatCurrency(actual, 'CAD')} → real ${formatCurrency(real, 'CAD')}`
+  }).then(() => renderAll());
+  renderAll();
+  showToast(`Ajuste de ${diff > 0 ? '+' : '-'}${formatCurrency(monto, 'CAD')} en ${accountShortName(acc.nombre)}`);
 }
 
 function fillTransferSelects(origen) {

@@ -179,6 +179,15 @@
       <!-- ============================================== -->
       <!-- VIEW 1: INICIO (DASHBOARD)                     -->
       <!-- ============================================== -->
+      <!-- Aviso de versión nueva -->
+      <div id="updateBanner" class="hidden mx-4 mb-3 p-3 rounded-xl bg-secondary-container text-on-secondary-container shadow-md flex items-center justify-between gap-3" role="status">
+        <span class="flex items-center gap-2 text-body-sm font-semibold min-w-0">
+          <span class="material-symbols-outlined text-[20px] shrink-0">system_update</span>
+          <span>Hay una versión nueva de la app</span>
+        </span>
+        <button id="updateBannerBtn" type="button" class="shrink-0 h-9 px-3 rounded-lg bg-primary text-on-primary text-label-md font-bold">Actualizar</button>
+      </div>
+
       <section id="view-inicio" class="view-panel active px-gutter space-y-space-lg">
 
         <!-- Saludo y selector de mes -->
@@ -208,7 +217,7 @@
             <div class="flex flex-col">
               <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-1.5 text-on-primary-container min-w-0">
-                  <span class="text-body-sm truncate" title="Ingresos menos gastos de todos los meses">Balance acumulado</span>
+                  <button type="button" data-action="goto" data-view="cuentas" class="text-body-sm truncate flex items-center gap-0.5 hover:underline" title="Lo disponible en débito y efectivo menos la deuda de las tarjetas de crédito (igual que en Cuentas)">Saldo en cuentas <span class="material-symbols-outlined text-[14px]">chevron_right</span></button>
                   <button aria-label="Mostrar u ocultar balance" id="balanceToggleBtn" class="opacity-80 hover:opacity-100 transition-opacity" type="button">
                     <span id="eyeIcon" class="material-symbols-outlined text-[16px]">visibility</span>
                   </button>
@@ -217,6 +226,7 @@
               </div>
               <span id="balanceAmount" class="mt-0.5 text-display-lg-mobile font-display-lg-mobile font-bold tracking-tight break-all">$0</span>
               <span id="balanceMonthText" class="text-body-sm text-on-primary-container"></span>
+              <span id="balanceNote" class="hidden text-[11px] text-on-primary-container/80"></span>
             </div>
 
             <!-- Income & Expense Split -->

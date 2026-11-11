@@ -9,7 +9,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
 ## ✨ Características
 
 - 📊 **Inicio**
-  - Balance acumulado (con modo privacidad) y el resultado del mes, ingresos y gastos del mes y tasa de ahorro.
+  - **Saldo en cuentas** (con modo privacidad): el mismo total de la pestaña Cuentas, en CAD (disponible en débito y efectivo menos la deuda de las tarjetas); al tocarlo se abre Cuentas. Debajo, el resultado del mes, ingresos y gastos del mes y tasa de ahorro, y cuántos movimientos sin cuenta quedan fuera del saldo.
   - Selector de mes para revisar meses anteriores (también lo usan Movimientos, Estadísticas y Presupuesto).
   - Barra de presupuesto global con lo que queda y los días restantes del mes.
   - Recurrentes por confirmar, conversor de divisas plegable y los últimos 5 movimientos.
@@ -26,6 +26,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Arriba: patrimonio (disponible en débito y efectivo menos la deuda de las tarjetas de crédito).
   - **Saldo inicial**: al abrir una cuenta escribes su saldo (o lo que debes, en crédito) al empezar un día; desde ahí suman los ingresos y restan los gastos registrados con esa cuenta. En crédito, los gastos aumentan la deuda.
   - **Transferir o pagar tarjeta**: mueve dinero entre cuentas sin contarlo como gasto ni ingreso (p. ej. pagar la tarjeta de crédito desde la débito). Se borra desde la lista de movimientos de la cuenta.
+  - **Ajustar al saldo real**: si el banco muestra otro saldo (o, en crédito, otra deuda), lo escribes y la app registra la diferencia como «Ajuste de saldo» con fecha de hoy, para que la cuenta quede igual al banco. Se guarda en la pestaña Transferencias (contraparte *Ajuste de saldo*), no cuenta como gasto ni ingreso y se puede borrar.
   - Cada cuenta muestra sus movimientos desde el saldo inicial y un acceso a *Movimientos* filtrado por esa cuenta. Los registros anteriores a las cuentas no tienen cuenta y no cuentan en los saldos hasta que los edites y elijas una.
 - 🔁 **Movimientos recurrentes** (arriendo, nómina, suscripciones, cuota de la TC)
   - 🔔 *Proponer*: cada mes aparece en Inicio para **Registrar**, revisarlo (✏️) u **Omitir**.
@@ -60,6 +61,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Todo se guarda en el navegador (`localStorage`); con Google Sheets conectado, los movimientos, presupuestos y recurrentes también quedan en la hoja.
   - Respaldo e importación en JSON y exportación a CSV desde *Ajustes*.
 - 📲 **PWA**: instalable en el celular y con caché sin conexión (service worker).
+- 🔔 **Aviso de versión nueva**: al abrir la app o volver a ella, compara la marca (ETag) del `app.js` publicado con la que está corriendo; si cambió, muestra «Hay una versión nueva de la app» con un botón **Actualizar** que descarga los archivos sin caché y recarga. No hay que numerar versiones.
 
 ---
 
