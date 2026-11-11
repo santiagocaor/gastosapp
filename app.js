@@ -2042,19 +2042,23 @@ function renderAccountsView() {
   setText('accDeuda', formatCurrency(deuda, 'CAD'));
   setText('accNeto', formatCurrency(disponible - deuda, 'CAD'));
 
-  const groups = {};
-  accounts.forEach(a => { (groups[a.titular || 'Compartidas'] = groups[a.titular || 'Compartidas'] || []).push(a); });
-  list.innerHTML = Object.entries(groups).map(([owner, accs]) => {
-    const net = accs.reduce((n, a) => n + (a.tipo === 'credito' ? -1 : 1) * state.accountBalance(a.nombre), 0);
-    return `
+  // Dos bloques: débito y efectivo (lo disponible) y tarjetas de crédito (lo que se debe).
+  // Dentro de cada bloque, ordenadas por titular (las compartidas, como Efectivo, al final).
+  const byOwner = (a, b) => (a.titular ? 0 : 1) - (b.titular ? 0 : 1) || String(a.titular).localeCompare(String(b.titular)) || accounts.indexOf(a) - accounts.indexOf(b);
+  const blocks = [
+    { title: 'Débito y efectivo', icon: 'account_balance', accs: accounts.filter(a => a.tipo !== 'credito').sort(byOwner), label: 'Disponible', total: disponible, bad: disponible < 0 },
+    { title: 'Tarjetas de crédito', icon: 'credit_card', accs: accounts.filter(a => a.tipo === 'credito').sort(byOwner), label: deuda < 0 ? 'A favor' : 'Deuda', total: Math.abs(deuda), bad: deuda > 0.004 }
+  ].filter(b => b.accs.length);
+  list.innerHTML = blocks.map(b => `
       <div class="space-y-2">
         <div class="flex items-center justify-between px-1 pt-1">
-          <span class="text-label-lg font-bold text-on-surface">${escapeHtml(owner)}</span>
-          <span class="text-label-md font-semibold ${net < 0 ? 'text-error' : 'text-secondary'}">Neto ${net < 0 ? '-' : ''}${formatCurrency(Math.abs(net), 'CAD')}</span>
+          <span class="flex items-center gap-1.5 text-label-lg font-bold text-on-surface">
+            <span class="material-symbols-outlined text-[18px] text-secondary">${b.icon}</span>${b.title}
+          </span>
+          <span class="text-label-md font-semibold ${b.bad ? 'text-error' : 'text-secondary'}">${b.label} ${b.total < 0 ? '-' : ''}${formatCurrency(Math.abs(b.total), 'CAD')}</span>
         </div>
-        ${accs.map(accountRowsHtml).join('')}
-      </div>`;
-  }).join('');
+        ${b.accs.map(accountRowsHtml).join('')}
+      </div>`).join('');
 
   const sinCuenta = state.data.gastos.filter(g => !g.cuenta).length + state.data.ingresos.filter(i => !i.cuenta).length;
   const note = document.getElementById('accNote');

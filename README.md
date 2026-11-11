@@ -22,7 +22,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - **Fecha editable** (para registrar movimientos de días anteriores) y nota opcional.
   - **Repetir cada mes**: convierte el movimiento en recurrente.
 - 💳 **Cuentas**
-  - Las tarjetas de Lina y Santiago (Nu débito y crédito, Royal Bank, Caja Social, Wealthsimple, Scotiabank, Canadian Tire) y Efectivo, agrupadas por titular, con su saldo en CAD.
+  - Las tarjetas de Lina y Santiago (Nu débito y crédito, Royal Bank, Caja Social, Wealthsimple, Scotiabank, Canadian Tire) y Efectivo, con su saldo en CAD, en dos bloques: **débito y efectivo** (con el total disponible) y **tarjetas de crédito** (con la deuda total); dentro de cada bloque, ordenadas por titular.
   - Arriba: patrimonio (disponible en débito y efectivo menos la deuda de las tarjetas de crédito).
   - **Saldo inicial**: al abrir una cuenta escribes su saldo (o lo que debes, en crédito) al empezar un día; desde ahí suman los ingresos y restan los gastos registrados con esa cuenta. En crédito, los gastos aumentan la deuda.
   - **Transferir o pagar tarjeta**: mueve dinero entre cuentas sin contarlo como gasto ni ingreso (p. ej. pagar la tarjeta de crédito desde la débito). Se borra desde la lista de movimientos de la cuenta.
