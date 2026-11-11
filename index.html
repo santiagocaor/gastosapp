@@ -505,21 +505,6 @@
             <select id="regConceptoSelect" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary cursor-pointer"></select>
           </div>
 
-          <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs space-y-1.5 border border-slate-100">
-            <span class="text-label-md text-on-surface font-bold block">4. Medio de pago</span>
-            <div id="medioPagoSegment" class="flex items-center bg-surface-container-low p-1 rounded-xl" role="group" aria-label="Medio de pago">
-              <button type="button" data-action="set-medio" data-medio="debito" class="flex-1 py-1.5 rounded-lg text-label-md font-semibold flex items-center justify-center gap-1 transition-all">
-                <span class="material-symbols-outlined text-[16px]">account_balance</span> Débito
-              </button>
-              <button type="button" data-action="set-medio" data-medio="efectivo" class="flex-1 py-1.5 rounded-lg text-label-md font-semibold flex items-center justify-center gap-1 transition-all">
-                <span class="material-symbols-outlined text-[16px]">payments</span> Efectivo
-              </button>
-              <button type="button" data-action="set-medio" data-medio="credito" class="flex-1 py-1.5 rounded-lg text-label-md font-semibold flex items-center justify-center gap-1 transition-all">
-                <span class="material-symbols-outlined text-[16px]">credit_card</span> Crédito
-              </button>
-            </div>
-            <p id="medioPagoHint" class="text-[11px] text-on-surface-variant"></p>
-          </div>
         </div>
 
         <!-- SECCIÓN DINÁMICA: INGRESOS (Tipo de Ingreso -> Concepto de Ingreso) -->
@@ -533,6 +518,15 @@
             <label class="text-label-md text-on-surface font-bold block" for="regConceptoIngresoSelect">2. Concepto de Ingreso</label>
             <select id="regConceptoIngresoSelect" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary cursor-pointer"></select>
           </div>
+        </div>
+
+        <!-- Cuenta (gastos e ingresos) -->
+        <div class="w-full bg-surface-container-lowest rounded-xl p-3 shadow-xs space-y-1.5 border border-slate-100">
+          <label class="text-label-md text-on-surface font-bold flex items-center gap-1" for="regCuentaSelect">
+            <span class="material-symbols-outlined text-[18px] text-secondary">account_balance_wallet</span> Cuenta
+          </label>
+          <select id="regCuentaSelect" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface font-body-md border border-slate-200 outline-none focus:ring-2 focus:ring-secondary cursor-pointer"></select>
+          <p id="regCuentaHint" class="text-[11px] text-on-surface-variant"></p>
         </div>
 
         <!-- Nota / Detalle común -->
@@ -764,6 +758,35 @@
       <!-- ============================================== -->
       <!-- VIEW 5: PRESUPUESTOS                           -->
       <!-- ============================================== -->
+      <section id="view-cuentas" class="view-panel px-margin space-y-space-md pb-6">
+        <div class="relative overflow-hidden bg-primary-container text-on-primary rounded-xl p-space-lg shadow-xl">
+          <div class="absolute -right-8 -top-8 w-40 h-40 bg-secondary-container/10 rounded-full blur-2xl pointer-events-none"></div>
+          <div class="relative z-10 flex flex-col space-y-space-sm">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-label-md tracking-wider uppercase opacity-90 font-medium">Patrimonio en cuentas</span>
+              <span class="text-label-md font-semibold px-2.5 py-1 rounded-full bg-surface-container-lowest/15 whitespace-nowrap">CAD</span>
+            </div>
+            <span id="accNeto" class="text-display-lg-mobile font-bold tracking-tight">CA$0.00</span>
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <div class="bg-black/10 rounded-lg p-2.5">
+                <span class="text-body-sm text-on-primary/80 block">Disponible (débito y efectivo)</span>
+                <span id="accDisponible" class="text-label-lg font-bold text-secondary-fixed">CA$0.00</span>
+              </div>
+              <div class="bg-black/10 rounded-lg p-2.5">
+                <span class="text-body-sm text-on-primary/80 block">Deuda en tarjetas de crédito</span>
+                <span id="accDeuda" class="text-label-lg font-bold">CA$0.00</span>
+              </div>
+            </div>
+            <button type="button" data-action="open-transfer" class="mt-1 h-10 rounded-lg bg-surface-container-lowest/15 hover:bg-surface-container-lowest/25 text-on-primary text-label-md font-semibold flex items-center justify-center gap-1.5">
+              <span class="material-symbols-outlined text-[18px]">swap_horiz</span> Transferir o pagar tarjeta
+            </button>
+          </div>
+        </div>
+
+        <div id="accNote" class="hidden p-3 rounded-xl bg-surface-container text-[12px] text-on-surface-variant space-y-1"></div>
+        <div id="accountsList" class="space-y-space-md"></div>
+      </section>
+
       <section id="view-presupuestos" class="view-panel px-margin space-y-space-md">
 
         <div class="relative overflow-hidden bg-primary-container text-on-primary rounded-xl p-space-lg shadow-xl">
@@ -819,32 +842,37 @@
 
     <!-- Bottom Navigation Bar -->
     <nav class="fixed bottom-0 inset-x-0 mx-auto max-w-md w-full z-40 pb-safe bg-surface-container-lowest/95 backdrop-blur-xl border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(11,28,48,0.06)]" aria-label="Navegación principal">
-      <div class="flex items-center justify-around h-16 px-gutter max-w-md mx-auto">
-        <a aria-current="page" class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 transition-colors text-secondary font-semibold" data-path="inicio" href="#">
+      <div class="flex items-center justify-around h-16 px-1 max-w-md mx-auto">
+        <a aria-current="page" class="flex flex-col items-center justify-center flex-1 min-w-0 min-h-[44px] gap-0.5 transition-colors text-secondary font-semibold" data-path="inicio" href="#">
           <span class="material-symbols-outlined text-[24px]">home</span>
-          <span class="text-label-md">Inicio</span>
+          <span class="text-[10px] leading-tight tracking-tight whitespace-nowrap">Inicio</span>
         </a>
 
-        <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="estadisticas" href="#">
+        <a class="flex flex-col items-center justify-center flex-1 min-w-0 min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="estadisticas" href="#">
           <span class="material-symbols-outlined text-[24px]">bar_chart</span>
-          <span class="text-label-md">Estadísticas</span>
+          <span class="text-[10px] leading-tight tracking-tight whitespace-nowrap">Estadísticas</span>
         </a>
 
-        <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] -mt-5 group" data-path="registrar" href="#">
+        <a class="flex flex-col items-center justify-center flex-1 min-w-0 min-h-[44px] -mt-5 group" data-path="registrar" href="#">
           <div class="w-12 h-12 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_8px_16px_-2px_rgba(6,78,59,0.35)] active:scale-90 transition-transform group-hover:scale-105">
             <span class="material-symbols-outlined text-[26px]">add</span>
           </div>
-          <span class="text-label-md text-on-surface-variant group-hover:text-on-surface mt-1 font-medium">Registrar</span>
+          <span class="text-[10px] leading-tight tracking-tight whitespace-nowrap text-on-surface-variant group-hover:text-on-surface mt-1 font-medium">Registrar</span>
         </a>
 
-        <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="movimientos" href="#">
+        <a class="flex flex-col items-center justify-center flex-1 min-w-0 min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="movimientos" href="#">
           <span class="material-symbols-outlined text-[24px]">receipt_long</span>
-          <span class="text-label-md">Movimientos</span>
+          <span class="text-[10px] leading-tight tracking-tight whitespace-nowrap">Movimientos</span>
         </a>
 
-        <a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="presupuestos" href="#">
+        <a class="flex flex-col items-center justify-center flex-1 min-w-0 min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="cuentas" href="#">
+          <span class="material-symbols-outlined text-[24px]">credit_card</span>
+          <span class="text-[10px] leading-tight tracking-tight whitespace-nowrap">Cuentas</span>
+        </a>
+
+        <a class="flex flex-col items-center justify-center flex-1 min-w-0 min-h-[44px] gap-0.5 text-on-surface-variant hover:text-on-surface transition-colors" data-path="presupuestos" href="#">
           <span class="material-symbols-outlined text-[24px]">account_balance_wallet</span>
-          <span class="text-label-md">Presupuesto</span>
+          <span class="text-[10px] leading-tight tracking-tight whitespace-nowrap">Presupuesto</span>
         </a>
       </div>
     </nav>
@@ -897,6 +925,45 @@
           <span class="material-symbols-outlined text-[18px]">save</span>
           Guardar concepto
         </button>
+      </div>
+    </div>
+
+    <!-- Transferencia entre cuentas -->
+    <div id="transferModal" class="modal-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="transferTitle">
+      <div class="w-full max-w-sm bg-surface-container-lowest rounded-2xl p-space-lg shadow-2xl space-y-space-md border border-slate-200">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2 text-secondary">
+            <span class="material-symbols-outlined text-[24px]">swap_horiz</span>
+            <h3 id="transferTitle" class="font-headline-sm text-on-surface">Transferir entre cuentas</h3>
+          </div>
+          <button data-action="close-modal" data-modal="transferModal" aria-label="Cerrar" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container-low text-on-surface-variant" type="button">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <p class="text-[12px] text-on-surface-variant">Mueve dinero entre tus cuentas o paga una tarjeta de crédito. No cuenta como gasto ni como ingreso.</p>
+        <label class="block space-y-1">
+          <span class="text-label-md font-semibold text-on-surface">Desde</span>
+          <select id="trOrigen" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface border border-slate-200"></select>
+        </label>
+        <label class="block space-y-1">
+          <span class="text-label-md font-semibold text-on-surface">Hacia</span>
+          <select id="trDestino" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface border border-slate-200"></select>
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block space-y-1">
+            <span class="text-label-md font-semibold text-on-surface">Monto (CAD)</span>
+            <input id="trMonto" type="number" inputmode="decimal" step="any" min="0" placeholder="0.00" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface border border-slate-200"/>
+          </label>
+          <label class="block space-y-1">
+            <span class="text-label-md font-semibold text-on-surface">Fecha</span>
+            <input id="trFecha" type="date" class="w-full h-11 px-2 rounded-lg bg-surface-container-low text-on-surface border border-slate-200"/>
+          </label>
+        </div>
+        <label class="block space-y-1">
+          <span class="text-label-md font-semibold text-on-surface">Nota (opcional)</span>
+          <input id="trNota" maxlength="200" type="text" placeholder="Ej. Pago de la tarjeta" class="w-full h-11 px-3 rounded-lg bg-surface-container-low text-on-surface border border-slate-200"/>
+        </label>
+        <button type="button" data-action="save-transfer" class="w-full h-11 rounded-xl bg-primary text-on-primary font-label-lg font-bold">Guardar transferencia</button>
       </div>
     </div>
 

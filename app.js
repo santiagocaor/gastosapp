@@ -271,6 +271,58 @@ const MEDIOS_PAGO = {
   credito: { label: 'Tarjeta de crédito', short: 'TC', icon: 'credit_card' }
 };
 
+// Cuentas (v8): tarjetas débito/crédito y efectivo. Todas llevan el saldo en CAD.
+const CUENTAS_NOMBRES = [
+  'Debito Nu - Lina',
+  'Credito Nu - Lina',
+  'Debito Royal Bank - Lina',
+  'Debito Caja Social - Lina',
+  'Debito Wealthsimple - Lina',
+  'Debito Nu - Santiago',
+  'Credito Nu - Santiago',
+  'Debito Wealthsimple - Santiago',
+  'Debito Scotiabank - Santiago',
+  'Credito Canadian Tire - Santiago',
+  'Efectivo'
+];
+
+const TIPOS_CUENTA = {
+  debito: { label: 'Débito', icon: 'account_balance' },
+  credito: { label: 'Crédito', icon: 'credit_card' },
+  efectivo: { label: 'Efectivo', icon: 'payments' }
+};
+
+function accountTypeFromName(nombre) {
+  const t = normalizeText(nombre);
+  if (t.startsWith('credito')) return 'credito';
+  if (t.startsWith('efectivo')) return 'efectivo';
+  return 'debito';
+}
+
+// "Debito Nu - Lina" → titular "Lina"
+function accountOwnerFromName(nombre) {
+  const m = String(nombre || '').match(/\s-\s*(.+)$/);
+  return m ? m[1].trim() : '';
+}
+
+function defaultAccounts() {
+  return CUENTAS_NOMBRES.map(nombre => ({ nombre, tipo: accountTypeFromName(nombre), titular: accountOwnerFromName(nombre), saldo: 0, fecha: '', activa: true }));
+}
+
+// Nombre corto: "Debito Nu - Lina" → "Nu débito"
+function accountShortName(nombre) {
+  const m = String(nombre || '').match(/^(debito|débito|credito|crédito)\s+(.+?)(\s-\s.*)?$/i);
+  if (!m) return String(nombre || '');
+  return `${m[2]} ${accountTypeFromName(nombre) === 'credito' ? 'crédito' : 'débito'}`;
+}
+
+// Monto de un movimiento en CAD (los saldos de las cuentas van en CAD)
+function itemCAD(item) {
+  if (item.moneda === 'CAD' && Number(item.montoOriginal) > 0) return Number(item.montoOriginal);
+  const tasa = Number(item.tasa) > 0 ? Number(item.tasa) : cadRate();
+  return Number(item.valor || 0) / tasa;
+}
+
 // Acepta el código o el nombre que llega de Sheets ("Tarjeta de crédito", "Débito"...)
 function normalizeMedio(v) {
   const t = normalizeText(v).trim();
@@ -475,6 +527,69 @@ class AppState {
     if (typeof d.presupuestosPendientes !== 'number') d.presupuestosPendientes = 0; // marca de la edición sin enviar (0 = nada)
     if (!Array.isArray(d.pendingRecDeletes)) d.pendingRecDeletes = [];             // ids de recurrentes borrados sin enviar
     if (typeof d.recurrentesEnHoja !== 'boolean') d.recurrentesEnHoja = false;     // ya se hizo la primera sincronización
+    // Script v8: cuentas y transferencias
+    if (!Array.isArray(d.cuentas) || d.cuentas.length === 0) d.cuentas = defaultAccounts();
+    if (!Array.isArray(d.transferencias)) d.transferencias = [];
+    if (typeof d.cuentasPendientes !== 'number') d.cuentasPendientes = 0; // marca de la edición sin enviar (0 = nada)
+    if (typeof d.registroCuenta !== 'string') d.registroCuenta = '';     // última cuenta usada al registrar
+  }
+
+  // ---------- Cuentas (v8) ----------
+
+  accounts() {
+    return this.data.cuentas.filter(a => a.activa !== false);
+  }
+
+  account(nombre) {
+    const k = normalizeText(nombre).trim();
+    return k ? this.data.cuentas.find(a => normalizeText(a.nombre).trim() === k) : undefined;
+  }
+
+  supportsAccounts() {
+    return this.isFullSync() && this.data.sheetsVersion >= 8;
+  }
+
+  markAccountsDirty() {
+    this.data.cuentasPendientes = this.editStamp();
+    this.save();
+    this.pushConfigSoon();
+  }
+
+  setAccountStart(nombre, saldo, fecha) {
+    const acc = this.account(nombre);
+    if (!acc) return;
+    acc.saldo = Math.round(Number(saldo) * 100) / 100;
+    acc.fecha = isIsoDate(fecha) ? fecha : localISODate();
+    this.markAccountsDirty();
+  }
+
+  // Movimientos de una cuenta desde su saldo inicial: [{ kind, item, signed }] (signed en CAD:
+  // + suma al saldo de débito/efectivo; en crédito, + aumenta la deuda)
+  accountMovements(nombre, { all = false } = {}) {
+    const acc = this.account(nombre);
+    if (!acc) return [];
+    const credit = acc.tipo === 'credito';
+    const from = !all && isIsoDate(acc.fecha) ? acc.fecha : '';
+    const same = n => normalizeText(n).trim() === normalizeText(acc.nombre).trim();
+    const out = [];
+    const push = (kind, item, sign) => {
+      if (from && String(item.fecha || '') < from) return;
+      out.push({ kind, item, signed: sign * itemCAD(item) });
+    };
+    this.data.gastos.forEach(g => { if (same(g.cuenta)) push('gasto', g, credit ? 1 : -1); });
+    this.data.ingresos.forEach(i => { if (same(i.cuenta)) push('ingreso', i, credit ? -1 : 1); });
+    this.data.transferencias.forEach(t => {
+      if (same(t.cuentaOrigen)) push('salida', t, credit ? 1 : -1);
+      if (same(t.cuentaDestino)) push('entrada', t, credit ? -1 : 1);
+    });
+    return out.sort((a, b) => sortMovements(a.item, b.item));
+  }
+
+  // Saldo en CAD: lo disponible en débito/efectivo, lo que se debe en crédito
+  accountBalance(nombre) {
+    const acc = this.account(nombre);
+    if (!acc) return 0;
+    return Math.round((Number(acc.saldo || 0) + this.accountMovements(nombre).reduce((a, m) => a + m.signed, 0)) * 100) / 100;
   }
 
   save() {
@@ -590,6 +705,7 @@ class AppState {
   configPendingCount() {
     if (!this.supportsConfig()) return 0;
     return (this.data.presupuestosPendientes ? 1 : 0)
+      + (this.supportsAccounts() && this.data.cuentasPendientes ? 1 : 0)
       + this.data.recurrentes.filter(t => t.synced === false).length
       + this.data.pendingRecDeletes.length;
   }
@@ -607,6 +723,7 @@ class AppState {
       monto: d.moneda === 'CAD' ? Number(d.montoOriginal) : Number(d.valor),
       moneda: d.moneda === 'CAD' ? 'CAD' : 'COP',
       medioPago: gasto ? MEDIOS_PAGO[d.medioPago]?.label || '' : '',
+      cuenta: d.cuenta || '',
       dia: tpl.dia,
       modo: tpl.modo,
       activo: tpl.activo,
@@ -634,6 +751,7 @@ class AppState {
         nota: r.nota || '',
         moneda: cad ? 'CAD' : 'COP',
         medioPago: gasto ? normalizeMedio(r.medioPago) : undefined,
+        cuenta: r.cuenta || prev?.datos?.cuenta || undefined,
         montoOriginal: cad ? monto : undefined,
         valor: cad ? Math.round(monto * cadRate()) : Math.round(monto)
       },
@@ -671,6 +789,13 @@ class AppState {
       if (r.ok && this.data.presupuestosPendientes === stamp) this.data.presupuestosPendientes = 0;
       this.save();
     }
+    const accStamp = this.data.cuentasPendientes;
+    if (accStamp && this.supportsAccounts()) {
+      const r = await this.callSheets({ action: 'setAccounts', accounts: this.data.cuentas.map(a => ({ nombre: a.nombre, tipo: a.tipo, titular: a.titular, saldo: a.saldo, fecha: a.fecha, activa: a.activa !== false })) });
+      if (r.network) return;
+      if (r.ok && this.data.cuentasPendientes === accStamp) this.data.cuentasPendientes = 0;
+      this.save();
+    }
     const dirty = this.data.recurrentes.filter(t => t.synced === false);
     if (dirty.length) {
       const sent = dirty.map(t => [t, t.editado]);
@@ -700,6 +825,23 @@ class AppState {
         });
         this.data.presupuestos = presupuestos;
         this.data.presupuestoMoneda = cur;
+      }
+    }
+
+    // Cuentas (v8): la hoja manda, salvo una edición local sin enviar; si está vacía se suben las de la app
+    if (this.supportsAccounts() && Array.isArray(remote.accounts) && !this.data.cuentasPendientes) {
+      const rows = remote.accounts.filter(a => a && a.nombre);
+      if (rows.length === 0) {
+        this.data.cuentasPendientes = this.editStamp();
+      } else {
+        this.data.cuentas = rows.map(a => ({
+          nombre: String(a.nombre),
+          tipo: TIPOS_CUENTA[a.tipo] ? a.tipo : accountTypeFromName(a.nombre),
+          titular: a.titular || accountOwnerFromName(a.nombre),
+          saldo: toAmount(a.saldo),
+          fecha: isIsoDate(a.fecha) ? a.fecha : '',
+          activa: a.activa !== false
+        }));
       }
     }
 
@@ -743,7 +885,7 @@ class AppState {
   }
 
   list(type) {
-    return type === 'gasto' ? this.data.gastos : this.data.ingresos;
+    return type === 'gasto' ? this.data.gastos : type === 'transferencia' ? this.data.transferencias : this.data.ingresos;
   }
 
   find(type, id) {
@@ -755,6 +897,20 @@ class AppState {
     const currency = item.moneda === 'CAD'
       ? { currency: 'CAD', originalAmount: item.montoOriginal, rate: item.tasa }
       : { currency: 'COP', originalAmount: '', rate: '' };
+    if (type === 'transferencia') {
+      return {
+        type: 'transferencia',
+        id: item.id,
+        date: item.fecha,
+        fromAccount: item.cuentaOrigen,
+        toAccount: item.cuentaDestino,
+        amount: item.valor,
+        note: item.nota || '',
+        ...currency
+      };
+    }
+    // Cuenta (v8): el script v7 la ignora
+    const account = item.cuenta ? { account: item.cuenta } : {};
     if (type === 'gasto') {
       return {
         type: "gasto",
@@ -767,6 +923,7 @@ class AppState {
         note: item.nota || "",
         paymentMethod: item.nota || "", // nombre que usaba el script antiguo
         paymentType: MEDIOS_PAGO[item.medioPago]?.label || "",
+        ...account,
         ...currency
       };
     }
@@ -779,12 +936,13 @@ class AppState {
       amount: item.valor,
       note: item.nota || "",
       paymentMethod: item.nota || "",
+      ...account,
       ...currency
     };
   }
 
   async addMovement(type, item) {
-    item.id = item.id || newId(type === 'gasto' ? 'tx_g_' : 'tx_i_');
+    item.id = item.id || newId(type === 'gasto' ? 'tx_g_' : type === 'transferencia' ? 'tx_t_' : 'tx_i_');
     item.fecha = isIsoDate(item.fecha) ? item.fecha : localISODate();
     item.createdAt = Date.now();
     item.synced = false; // pendiente hasta que llegue a Google Sheets
@@ -810,6 +968,7 @@ class AppState {
   deleteMovement(type, id) {
     const item = this.find(type, id);
     if (type === 'gasto') this.data.gastos = this.data.gastos.filter(g => g.id !== id);
+    else if (type === 'transferencia') this.data.transferencias = this.data.transferencias.filter(t => t.id !== id);
     else this.data.ingresos = this.data.ingresos.filter(i => i.id !== id);
     if (item && item.remote && this.isFullSync()) this.data.pendingDeletes.push({ type, id });
     this.save();
@@ -830,7 +989,9 @@ class AppState {
   getPending() {
     return [
       ...this.data.gastos.filter(g => g.synced === false).map(item => ({ type: 'gasto', item })),
-      ...this.data.ingresos.filter(i => i.synced === false).map(item => ({ type: 'ingreso', item }))
+      ...this.data.ingresos.filter(i => i.synced === false).map(item => ({ type: 'ingreso', item })),
+      // Las transferencias solo se envían a un script v8 (los anteriores no tienen dónde guardarlas)
+      ...(this.supportsAccounts() ? this.data.transferencias.filter(t => t.synced === false).map(item => ({ type: 'transferencia', item })) : [])
     ];
   }
 
@@ -839,6 +1000,7 @@ class AppState {
   }
 
   async syncItem(type, item) {
+    if (type === 'transferencia' && !this.supportsAccounts()) return false;
     let ok;
     if (this.isFullSync()) {
       const r = await this.callSheets({ action: 'upsert', ...this.payload(type, item) });
@@ -967,11 +1129,13 @@ class AppState {
     if (base.id.startsWith('rec_')) base.recurrenteId = base.id.split('_')[1];
     const medio = normalizeMedio(r.medioPago);
     if (medio) base.medioPago = medio;
+    if (r.cuenta) base.cuenta = String(r.cuenta);
     if (r.moneda === 'CAD' && toAmount(r.montoOriginal) > 0) {
       Object.assign(base, { moneda: 'CAD', montoOriginal: toAmount(r.montoOriginal), tasa: toAmount(r.tasa) || (base.valor / toAmount(r.montoOriginal)) });
     } else if (r.moneda === 'COP') {
       base.moneda = 'COP';
     }
+    if (type === 'transferencia') return { ...base, cuentaOrigen: String(r.cuentaOrigen || ''), cuentaDestino: String(r.cuentaDestino || '') };
     return type === 'gasto'
       ? { ...base, macroCategoria: r.macroCategoria || "Necesidades", subcategoria: r.subcategoria || "Varios" }
       : { ...base, tipoIngreso: r.tipoIngreso || "Laboral" };
@@ -995,6 +1159,7 @@ class AppState {
         }
 
         await ensureFreshRate();
+        const hadAccounts = this.supportsAccounts();
         await this.resendPending();
 
         let remote;
@@ -1022,8 +1187,8 @@ class AppState {
         }
 
         const deleted = new Set(this.data.pendingDeletes.map(d => `${d.type}:${d.id}`));
-        ['gasto', 'ingreso'].forEach(type => {
-          const key = type === 'gasto' ? 'gastos' : 'ingresos';
+        ['gasto', 'ingreso', 'transferencia'].forEach(type => {
+          const key = type === 'gasto' ? 'gastos' : type === 'transferencia' ? 'transferencias' : 'ingresos';
           if (!Array.isArray(remote[key])) return;
           const local = this.data[key];
           const pending = local.filter(m => m.synced === false);
@@ -1038,6 +1203,8 @@ class AppState {
               const merged = { ...m, createdAt: prev.createdAt, recurrenteId: prev.recurrenteId };
               // Script sin columna de medio de pago: se conserva el guardado en la app
               if (!m.medioPago && prev.medioPago) merged.medioPago = prev.medioPago;
+              // Script sin columna Cuenta (v7): se conserva la cuenta guardada en la app
+              if (!m.cuenta && prev.cuenta) merged.cuenta = prev.cuenta;
               // Script sin columnas de moneda: se conserva la moneda original guardada en la app
               if (!m.moneda && prev.moneda === 'CAD' && Math.round(prev.valor) === Math.round(m.valor)) {
                 Object.assign(merged, { moneda: 'CAD', montoOriginal: prev.montoOriginal, tasa: prev.tasa });
@@ -1051,9 +1218,13 @@ class AppState {
         // que los recurrentes ya registrados en otro dispositivo no se vuelvan a crear)
         let configChanged = false;
         if (this.supportsConfig() && Array.isArray(remote.budgets) && Array.isArray(remote.recurring)) {
-          const before = JSON.stringify([this.data.presupuestos, this.data.presupuestoMoneda, this.data.recurrentes]);
+          const before = JSON.stringify([this.data.presupuestos, this.data.presupuestoMoneda, this.data.recurrentes, this.data.cuentas]);
           if (this.mergeConfig(remote)) await this.pushConfig();
-          configChanged = before !== JSON.stringify([this.data.presupuestos, this.data.presupuestoMoneda, this.data.recurrentes]);
+          configChanged = before !== JSON.stringify([this.data.presupuestos, this.data.presupuestoMoneda, this.data.recurrentes, this.data.cuentas]);
+        }
+        // Recién se detectó un script v8: las transferencias guardadas solo aquí se envían ya
+        if (!hadAccounts && this.supportsAccounts() && this.data.transferencias.some(t => t.synced === false)) {
+          await this.resendPending();
         }
 
         this.data.lastPull = Date.now();
@@ -1086,7 +1257,7 @@ class AppState {
 
   exportCSV() {
     const cell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['Tipo', 'Fecha', 'Valor (COP)', 'Categoría', 'Subcategoría', 'Concepto', 'Nota', 'Moneda', 'Monto original', 'Tasa CAD→COP', 'Medio de pago']];
+    const rows = [['Tipo', 'Fecha', 'Valor (COP)', 'Categoría', 'Subcategoría', 'Concepto', 'Nota', 'Moneda', 'Monto original', 'Tasa CAD→COP', 'Medio de pago', 'Cuenta']];
     [...this.data.gastos.map(g => ({ ...g, t: 'Gasto' })), ...this.data.ingresos.map(i => ({ ...i, t: 'Ingreso' }))]
       .sort(sortMovements)
       .forEach(m => rows.push([
@@ -1095,7 +1266,8 @@ class AppState {
         m.t === 'Gasto' ? m.subcategoria : '',
         m.concepto, m.nota,
         m.moneda === 'CAD' ? 'CAD' : 'COP', m.moneda === 'CAD' ? m.montoOriginal : '', m.moneda === 'CAD' ? m.tasa : '',
-        MEDIOS_PAGO[m.medioPago]?.label || ''
+        MEDIOS_PAGO[m.medioPago]?.label || '',
+        m.cuenta || ''
       ]));
     return '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n');
   }
@@ -1125,7 +1297,8 @@ const ui = {
   categorySearch: '',
   converterOpen: false,
   taxOpen: false,
-  mov: { q: '', type: 'all', cat: 'all', concept: 'all', period: 'mes' } // filtros de la pestaña Movimientos
+  mov: { q: '', type: 'all', cat: 'all', concept: 'all', period: 'mes' }, // filtros de la pestaña Movimientos
+  openAccount: null // cuenta desplegada en la pestaña Cuentas
 };
 
 // Estado del formulario de registro
@@ -1208,6 +1381,7 @@ const VIEW_TITLES = {
   estadisticas: 'Estadísticas',
   registrar: 'Registrar',
   movimientos: 'Movimientos',
+  cuentas: 'Cuentas',
   presupuestos: 'Presupuesto'
 };
 
@@ -1307,6 +1481,14 @@ function initActions() {
       case 'reset-budgets': resetBudgets(); break;
       case 'set-form-currency': setFormCurrency(d.currency); break;
       case 'set-medio': setFormMedio(d.medio); break;
+      case 'toggle-account':
+        ui.openAccount = ui.openAccount === d.account ? null : d.account;
+        renderAccountsView();
+        break;
+      case 'save-account-start': saveAccountStart(d.account); break;
+      case 'open-transfer': openTransferModal(d.account); break;
+      case 'save-transfer': saveTransfer(); break;
+      case 'delete-transfer': deleteItem('transferencia', d.id); break;
       case 'toggle-display-currency':
         state.data.displayCurrency = displayCurrency() === 'CAD' ? 'COP' : 'CAD';
         state.save();
@@ -1325,6 +1507,12 @@ function initActions() {
       case 'rec-toggle-active':
       case 'rec-delete':
         handleRecurringAction(d.action, d.tpl, d.month);
+        break;
+      case 'goto-account-movements':
+        ui.mov.cat = `a:${d.account}`;
+        ui.mov.concept = 'all';
+        ui.mov.type = 'all';
+        switchView('movimientos');
         break;
       case 'open-modal': openModal(d.modal); break;
       case 'close-modal': closeModal(d.modal); break;
@@ -1394,6 +1582,7 @@ function renderAll() {
   renderFormSyncHints();
   renderBudgetsView();
   renderMovementsView();
+  renderAccountsView();
   renderStatisticsView();
   renderNotifications();
   renderSettingsStatus();
@@ -1502,9 +1691,13 @@ function movementRow(m) {
       ? `<span class="material-symbols-outlined text-[14px] text-error align-middle" title="${escapeHtml(m.syncError)}">sync_problem</span>`
       : `<span class="material-symbols-outlined text-[14px] text-outline align-middle" title="Pendiente de enviar a Google Sheets">cloud_off</span>`)
     : '';
-  const medio = isGasto && MEDIOS_PAGO[m.medioPago]
-    ? `<span class="material-symbols-outlined text-[14px] text-outline align-middle" title="${MEDIOS_PAGO[m.medioPago].label}">${MEDIOS_PAGO[m.medioPago].icon}</span>`
-    : '';
+  // Cuenta (o, en registros antiguos sin cuenta, el medio de pago)
+  const acc = m.cuenta ? state.account(m.cuenta) : null;
+  const medio = m.cuenta
+    ? `<span class="material-symbols-outlined text-[14px] text-outline align-middle">${TIPOS_CUENTA[acc?.tipo || accountTypeFromName(m.cuenta)].icon}</span> ${escapeHtml(accountShortName(m.cuenta))}${acc?.titular ? ` · ${escapeHtml(acc.titular)}` : ''}`
+    : isGasto && MEDIOS_PAGO[m.medioPago]
+      ? `<span class="material-symbols-outlined text-[14px] text-outline align-middle" title="${MEDIOS_PAGO[m.medioPago].label}">${MEDIOS_PAGO[m.medioPago].icon}</span>`
+      : '';
   const recurring = m.recurrenteId
     ? `<span class="material-symbols-outlined text-[14px] text-secondary align-middle" title="Movimiento recurrente">event_repeat</span>`
     : '';
@@ -1522,7 +1715,8 @@ function movementRow(m) {
         </div>
         <div class="flex flex-col min-w-0">
           <span class="text-body-md font-semibold text-on-surface truncate">${title}</span>
-          <span class="text-body-sm text-on-surface-variant truncate">${subtitle} • ${escapeHtml(formatDisplayDate(m.fecha))} ${medio}${recurring}${pending}</span>
+          <span class="text-body-sm text-on-surface-variant truncate">${subtitle}</span>
+          ${medio || recurring || pending ? `<span class="text-[11px] text-outline truncate">${medio} ${recurring}${pending}</span>` : ''}
           ${m.nota ? `<span class="text-[11px] text-outline truncate italic">${escapeHtml(m.nota)}</span>` : ''}
         </div>
       </div>
@@ -1530,6 +1724,7 @@ function movementRow(m) {
         <span class="flex flex-col items-end leading-tight">
           <span class="font-data-metric text-[15px] tracking-tight ${color} whitespace-nowrap">${sign}${state.formatMoney(itemCOP(m))}</span>
           ${original}
+          <span class="text-[11px] text-on-surface-variant whitespace-nowrap">${escapeHtml(formatDisplayDate(m.fecha))}</span>
         </span>
         <button aria-label="Eliminar" data-action="delete" data-type="${m.type}" data-id="${escapeHtml(m.id)}" class="[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus:opacity-100 p-1.5 rounded-full text-on-surface-variant hover:text-error hover:bg-error-container/40 transition-opacity" type="button">
           <span class="material-symbols-outlined text-[18px]">delete</span>
@@ -1590,7 +1785,7 @@ function fillMovementConcepts() {
   const sel = document.getElementById('movConcept');
   if (!sel) return;
   const f = ui.mov;
-  const kind = f.cat === 'all' ? '' : f.cat.slice(0, 1);
+  const kind = f.cat === 'all' || f.cat.startsWith('a:') ? '' : f.cat.slice(0, 1);
   const name = f.cat.slice(2);
   const groups = []; // [{ label, prefix, conceptos: Set }]
   const group = (label, prefix) => {
@@ -1635,12 +1830,13 @@ function fillMovementConcepts() {
 function fillMovementCategories() {
   const cat = document.getElementById('movCategory');
   if (!cat) return;
-  const sig = JSON.stringify([macroList(), Object.keys(ingresoCatalog())]);
+  const sig = JSON.stringify([macroList(), Object.keys(ingresoCatalog()), state.data.cuentas.map(a => a.nombre)]);
   if (cat.dataset.sig === sig) return;
   cat.dataset.sig = sig;
   cat.innerHTML = `<option value="all">Todas las categorías</option>
       <optgroup label="Gastos">${macroList().map(m => `<option value="g:${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</optgroup>
       <optgroup label="Ingresos">${Object.keys(ingresoCatalog()).map(t => `<option value="i:${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}</optgroup>
+      <optgroup label="Por cuenta">${state.data.cuentas.map(a => `<option value="a:${escapeHtml(a.nombre)}">${escapeHtml(a.nombre)}</option>`).join('')}</optgroup>
       <optgroup label="Gastos por medio de pago">${Object.entries(MEDIOS_PAGO).map(([k, v]) => `<option value="m:${k}">${escapeHtml(v.label)}</option>`).join('')}</optgroup>`;
   cat.value = [...cat.options].some(o => o.value === ui.mov.cat) ? ui.mov.cat : 'all';
   ui.mov.cat = cat.value;
@@ -1678,6 +1874,7 @@ function renderMovementsView() {
     const name = f.cat.slice(2);
     all = all.filter(m => kind === 'g' ? m.type === 'gasto' && m.macroCategoria === name
       : kind === 'm' ? m.type === 'gasto' && m.medioPago === name
+      : kind === 'a' ? normalizeText(m.cuenta) === normalizeText(name)
       : m.type === 'ingreso' && m.tipoIngreso === name);
   }
   if (f.concept !== 'all') {
@@ -1734,7 +1931,8 @@ function deleteItem(type, id) {
   let extra = '';
   if (state.isFullSync() && item.remote) extra = '\n\nTambién se borrará de Google Sheets.';
   else if (item.synced === true && state.data.googleScriptUrl) extra = '\n\nSolo se elimina en la app: en Google Sheets debes borrarlo a mano (actualiza el Apps Script para que se borre solo).';
-  if (!confirm(`¿Deseas eliminar este registro de ${state.formatMoney(item.valor)}?${extra}`)) return;
+  const what = type === 'transferencia' ? `esta transferencia de ${formatCurrency(itemCAD(item), 'CAD')}` : `este registro de ${state.formatMoney(item.valor)}`;
+  if (!confirm(`¿Deseas eliminar ${what}?${extra}`)) return;
 
   state.deleteMovement(type, id);
   renderAll();
@@ -1745,6 +1943,205 @@ function deleteItem(type, id) {
       if (left > 0) showToast('Eliminado en la app; se borrará de Sheets al recuperar la conexión', 'info');
     });
   }
+}
+
+// --------------------------------------------------------
+// Cuentas: saldos por tarjeta, movimientos y transferencias
+// --------------------------------------------------------
+function accountRowsHtml(acc) {
+  const open = ui.openAccount === acc.nombre;
+  const t = TIPOS_CUENTA[acc.tipo] || TIPOS_CUENTA.debito;
+  const bal = state.accountBalance(acc.nombre);
+  const credit = acc.tipo === 'credito';
+  const movs = state.accountMovements(acc.nombre);
+  const balText = formatCurrency(credit ? Math.abs(bal) : bal, 'CAD');
+  const balLabel = credit ? (bal > 0.004 ? 'Debes' : bal < -0.004 ? 'A favor' : 'Sin deuda') : 'Disponible';
+  const balColor = credit ? (bal > 0.004 ? 'text-error' : 'text-secondary') : (bal < -0.004 ? 'text-error' : 'text-on-surface');
+  const head = `
+    <button type="button" data-action="toggle-account" data-account="${escapeHtml(acc.nombre)}" class="w-full flex items-center justify-between gap-3 p-3 text-left" aria-expanded="${open}">
+      <span class="flex items-center gap-3 min-w-0">
+        <span class="w-10 h-10 rounded-full ${credit ? 'bg-error-container/50 text-error' : acc.tipo === 'efectivo' ? 'bg-secondary-container/60 text-secondary' : 'bg-primary/10 text-primary'} flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-[20px]">${t.icon}</span>
+        </span>
+        <span class="flex flex-col min-w-0">
+          <span class="text-body-md font-semibold text-on-surface truncate">${escapeHtml(accountShortName(acc.nombre))}</span>
+          <span class="text-[11px] text-on-surface-variant truncate">${t.label}${acc.titular ? ` · ${escapeHtml(acc.titular)}` : ''} · ${movs.length} mov.</span>
+        </span>
+      </span>
+      <span class="flex items-center gap-1 shrink-0">
+        <span class="flex flex-col items-end leading-tight">
+          <span class="text-[11px] text-on-surface-variant">${balLabel}</span>
+          <span class="font-data-metric text-[15px] font-bold ${balColor} whitespace-nowrap">${bal < -0.004 && !credit ? '-' : ''}${credit ? balText : formatCurrency(Math.abs(bal), 'CAD')}</span>
+        </span>
+        <span class="material-symbols-outlined text-[20px] text-outline transition-transform ${open ? 'rotate-180' : ''}">expand_more</span>
+      </span>
+    </button>`;
+  if (!open) return `<div class="bg-surface-container-lowest rounded-xl shadow-xs">${head}</div>`;
+
+  const rows = movs.slice(0, 30).map(({ kind, item, signed }) => {
+    const shown = credit ? -signed : signed; // en crédito, pagar (reduce deuda) se ve en positivo
+    const title = kind === 'gasto' ? shortConcept(item.concepto) || item.subcategoria
+      : kind === 'ingreso' ? shortConcept(item.concepto) || item.tipoIngreso
+      : kind === 'salida' ? `Transferencia a ${accountShortName(item.cuentaDestino)}`
+      : `Transferencia de ${accountShortName(item.cuentaOrigen)}`;
+    const isTransfer = kind === 'salida' || kind === 'entrada';
+    const del = isTransfer
+      ? `<button type="button" data-action="delete-transfer" data-id="${escapeHtml(item.id)}" aria-label="Eliminar transferencia" class="p-1 rounded-full text-on-surface-variant hover:text-error"><span class="material-symbols-outlined text-[16px]">delete</span></button>`
+      : '';
+    const pending = item.synced === false && state.data.googleScriptUrl ? `<span class="material-symbols-outlined text-[13px] text-outline align-middle" title="Pendiente de enviar a Google Sheets">cloud_off</span>` : '';
+    return `
+      <div class="flex items-center justify-between gap-2 py-1.5 border-t border-slate-100 ${isTransfer ? '' : 'cursor-pointer'}" ${isTransfer ? '' : `role="button" data-action="edit" data-type="${kind}" data-id="${escapeHtml(item.id)}"`}>
+        <span class="flex flex-col min-w-0">
+          <span class="text-body-sm text-on-surface truncate">${isTransfer ? '<span class="material-symbols-outlined text-[14px] align-middle text-outline">swap_horiz</span> ' : ''}${escapeHtml(title)} ${pending}</span>
+          <span class="text-[11px] text-on-surface-variant">${escapeHtml(formatDisplayDate(item.fecha))}${item.nota ? ` · ${escapeHtml(item.nota)}` : ''}</span>
+        </span>
+        <span class="flex items-center gap-1 shrink-0">
+          <span class="text-body-sm font-semibold ${shown < 0 ? 'text-on-surface' : 'text-secondary'} whitespace-nowrap">${shown < 0 ? '-' : '+'}${formatCurrency(Math.abs(shown), 'CAD')}</span>
+          ${del}
+        </span>
+      </div>`;
+  }).join('');
+  const since = isIsoDate(acc.fecha) ? `desde el ${formatDisplayDate(acc.fecha)}` : 'desde el primer registro';
+  return `
+    <div class="bg-surface-container-lowest rounded-xl shadow-xs">
+      ${head}
+      <div class="px-3 pb-3 space-y-3">
+        <div class="bg-surface-container-low rounded-lg p-2.5 space-y-2">
+          <span class="text-[12px] font-semibold text-on-surface block">${credit ? 'Deuda inicial' : 'Saldo inicial'} (CAD) al empezar el día</span>
+          <div class="flex items-center gap-2">
+            <input type="number" inputmode="decimal" step="any" data-account-saldo="${escapeHtml(acc.nombre)}" value="${Number(acc.saldo || 0)}" class="w-28 h-9 px-2 rounded-lg bg-surface-container-lowest border border-slate-200 text-body-sm" aria-label="Saldo inicial"/>
+            <input type="date" data-account-fecha="${escapeHtml(acc.nombre)}" value="${isIsoDate(acc.fecha) ? acc.fecha : localISODate()}" class="flex-1 min-w-0 h-9 px-2 rounded-lg bg-surface-container-lowest border border-slate-200 text-body-sm" aria-label="Fecha del saldo"/>
+            <button type="button" data-action="save-account-start" data-account="${escapeHtml(acc.nombre)}" class="h-9 px-3 rounded-lg bg-primary text-on-primary text-label-md font-semibold">Guardar</button>
+          </div>
+          <p class="text-[11px] text-on-surface-variant">${credit ? 'Lo que debes en la tarjeta' : 'Lo que hay en la cuenta'} ese día, antes de los movimientos de esa fecha. Desde ahí suman y restan los movimientos registrados en la app.</p>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" data-action="open-transfer" data-account="${escapeHtml(acc.nombre)}" class="flex-1 h-9 rounded-lg border border-outline-variant text-label-md font-semibold text-secondary flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[18px]">swap_horiz</span>${credit ? 'Pagar tarjeta' : 'Transferir'}</button>
+          <button type="button" data-action="goto-account-movements" data-account="${escapeHtml(acc.nombre)}" class="flex-1 h-9 rounded-lg border border-outline-variant text-label-md font-semibold text-on-surface-variant flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[18px]">receipt_long</span>Ver en Movimientos</button>
+        </div>
+        <div>
+          <span class="text-[12px] font-semibold text-on-surface block mb-0.5">Movimientos ${since}</span>
+          ${rows || '<p class="text-body-sm text-on-surface-variant py-1">Aún no hay movimientos en esta cuenta.</p>'}
+          ${movs.length > 30 ? `<p class="text-[11px] text-outline pt-1">Se muestran los 30 más recientes.</p>` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderAccountsView() {
+  const list = document.getElementById('accountsList');
+  if (!list) return;
+  const accounts = state.accounts();
+  let disponible = 0;
+  let deuda = 0;
+  accounts.forEach(a => {
+    const b = state.accountBalance(a.nombre);
+    if (a.tipo === 'credito') deuda += b; else disponible += b;
+  });
+  setText('accDisponible', formatCurrency(disponible, 'CAD'));
+  setText('accDeuda', formatCurrency(deuda, 'CAD'));
+  setText('accNeto', formatCurrency(disponible - deuda, 'CAD'));
+
+  const groups = {};
+  accounts.forEach(a => { (groups[a.titular || 'Compartidas'] = groups[a.titular || 'Compartidas'] || []).push(a); });
+  list.innerHTML = Object.entries(groups).map(([owner, accs]) => {
+    const net = accs.reduce((n, a) => n + (a.tipo === 'credito' ? -1 : 1) * state.accountBalance(a.nombre), 0);
+    return `
+      <div class="space-y-2">
+        <div class="flex items-center justify-between px-1 pt-1">
+          <span class="text-label-lg font-bold text-on-surface">${escapeHtml(owner)}</span>
+          <span class="text-label-md font-semibold ${net < 0 ? 'text-error' : 'text-secondary'}">Neto ${net < 0 ? '-' : ''}${formatCurrency(Math.abs(net), 'CAD')}</span>
+        </div>
+        ${accs.map(accountRowsHtml).join('')}
+      </div>`;
+  }).join('');
+
+  const sinCuenta = state.data.gastos.filter(g => !g.cuenta).length + state.data.ingresos.filter(i => !i.cuenta).length;
+  const note = document.getElementById('accNote');
+  if (note) {
+    const parts = [];
+    if (sinCuenta > 0) parts.push(`${sinCuenta} movimiento${sinCuenta === 1 ? '' : 's'} registrado${sinCuenta === 1 ? '' : 's'} antes de las cuentas no tiene${sinCuenta === 1 ? '' : 'n'} cuenta y no cuenta${sinCuenta === 1 ? '' : 'n'} en los saldos. Si quieres, edítalo${sinCuenta === 1 ? '' : 's'} en Movimientos y elige la cuenta.`);
+    if (state.isFullSync() && !state.supportsAccounts()) parts.push('Actualiza el Apps Script a la v8 para guardar en la hoja los saldos iniciales y las transferencias; mientras tanto solo están en este dispositivo.');
+    note.innerHTML = parts.map(p => `<p>${escapeHtml(p)}</p>`).join('');
+    note.classList.toggle('hidden', parts.length === 0);
+  }
+}
+
+function saveAccountStart(nombre) {
+  const key = CSS.escape(nombre);
+  const saldoEl = document.querySelector(`[data-account-saldo="${key}"]`);
+  const fechaEl = document.querySelector(`[data-account-fecha="${key}"]`);
+  const val = Number(saldoEl?.value);
+  if (saldoEl?.value.trim() === '' || !Number.isFinite(val)) {
+    showToast('Introduce un saldo válido', 'error');
+    return;
+  }
+  state.setAccountStart(nombre, val, fechaEl?.value);
+  renderAll();
+  showToast(`Saldo inicial de ${accountShortName(nombre)} guardado`);
+}
+
+function fillTransferSelects(origen) {
+  const opts = state.accounts().map(a => `<option value="${escapeHtml(a.nombre)}">${escapeHtml(a.nombre)}</option>`).join('');
+  const from = document.getElementById('trOrigen');
+  const to = document.getElementById('trDestino');
+  if (!from || !to) return;
+  from.innerHTML = opts;
+  to.innerHTML = opts;
+  const acc = state.account(origen);
+  if (acc && acc.tipo === 'credito') {
+    // Pagar la tarjeta: el destino es la tarjeta y el origen, una débito del mismo titular
+    to.value = acc.nombre;
+    const fromAcc = state.accounts().find(a => a.tipo === 'debito' && a.titular === acc.titular) || state.accounts().find(a => a.tipo !== 'credito');
+    if (fromAcc) from.value = fromAcc.nombre;
+  } else if (acc) {
+    from.value = acc.nombre;
+    const other = state.accounts().find(a => a.nombre !== acc.nombre && a.tipo === 'credito' && a.titular === acc.titular) || state.accounts().find(a => a.nombre !== acc.nombre);
+    if (other) to.value = other.nombre;
+  }
+}
+
+function openTransferModal(origen) {
+  fillTransferSelects(origen);
+  const amt = document.getElementById('trMonto');
+  const fecha = document.getElementById('trFecha');
+  const nota = document.getElementById('trNota');
+  if (amt) amt.value = '';
+  if (fecha) fecha.value = localISODate();
+  if (nota) nota.value = '';
+  openModal('transferModal');
+  setTimeout(() => amt?.focus(), 50);
+}
+
+function saveTransfer() {
+  const from = state.account(document.getElementById('trOrigen')?.value);
+  const to = state.account(document.getElementById('trDestino')?.value);
+  const val = Math.round(parseFloat(document.getElementById('trMonto')?.value) * 100) / 100;
+  const fechaVal = document.getElementById('trFecha')?.value;
+  const nota = (document.getElementById('trNota')?.value || '').trim();
+  if (!from || !to) return showToast('Elige las dos cuentas', 'error');
+  if (from.nombre === to.nombre) return showToast('La cuenta de origen y la de destino deben ser distintas', 'error');
+  if (!val || val <= 0) return showToast('Introduce un monto válido', 'error');
+  const rate = Math.round(cadRate() * 100) / 100;
+  const item = {
+    fecha: isIsoDate(fechaVal) ? fechaVal : localISODate(),
+    valor: Math.round(val * rate),
+    moneda: 'CAD',
+    montoOriginal: val,
+    tasa: rate,
+    cuentaOrigen: from.nombre,
+    cuentaDestino: to.nombre,
+    nota
+  };
+  state.addMovement('transferencia', item).then(saved => {
+    renderAll();
+    if (state.data.googleScriptUrl && saved.synced === false && state.supportsAccounts()) {
+      showToast('Transferencia guardada; se enviará a Google Sheets al recuperar la conexión', 'info');
+    }
+  });
+  closeModal('transferModal');
+  renderAll();
+  showToast(`Transferencia de ${formatCurrency(val, 'CAD')} registrada`);
 }
 
 // --------------------------------------------------------
@@ -2398,10 +2795,12 @@ function computeAlerts() {
   if (pending - rejected.length > 0 && state.data.googleScriptUrl) {
     alerts.push({ level: 'info', icon: 'cloud_off', title: 'Cambios sin sincronizar', text: `${pending - rejected.length} cambio(s) aún no llegan a Google Sheets. Se reintentará al recuperar la conexión.` });
   }
-  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 7) {
-    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v7)', text: state.data.sheetsVersion < 6
-      ? 'La nueva versión de apps-script/Code.gs funciona con Tablas de Google Sheets, lee tus categorías de BDGastos/BDIngresos, guarda moneda, tasa y medio de pago, y comparte presupuestos y recurrentes entre tus dispositivos.'
-      : 'Con la nueva versión de apps-script/Code.gs, tus presupuestos y movimientos recurrentes se guardan en la hoja y son los mismos en todos tus dispositivos. Hoy solo están en este.' });
+  if (state.isFullSync() && state.data.sheetsVersion > 0 && state.data.sheetsVersion < 8) {
+    alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script (v8)', text: state.data.sheetsVersion < 6
+      ? 'La nueva versión de apps-script/Code.gs funciona con Tablas de Google Sheets, lee tus categorías de BDGastos/BDIngresos, comparte presupuestos y recurrentes, y guarda tus cuentas, saldos y transferencias en la hoja.'
+      : state.data.sheetsVersion < 7
+        ? 'Con la nueva versión de apps-script/Code.gs, tus presupuestos, recurrentes, cuentas y transferencias se guardan en la hoja y son los mismos en todos tus dispositivos.'
+        : 'Con la nueva versión de apps-script/Code.gs, la cuenta de cada movimiento, los saldos iniciales y las transferencias se guardan en la hoja. Hoy las transferencias y los saldos solo están en este dispositivo.' });
   }
   if (state.data.googleScriptUrl && state.data.sheetsProtocol === 1) {
     alerts.push({ level: 'info', icon: 'system_update', title: 'Actualiza tu Apps Script', text: 'Con el script antiguo, editar o borrar no llega a Google Sheets. Reemplázalo por apps-script/Code.gs para sincronizar en ambos sentidos.' });
@@ -2467,6 +2866,7 @@ function addRecurring(type, item, modo) {
       nota: item.nota,
       moneda: item.moneda === 'CAD' ? 'CAD' : 'COP',
       medioPago: item.medioPago,
+      cuenta: item.cuenta,
       montoOriginal: item.montoOriginal,
       valor: item.valor
     },
@@ -2505,7 +2905,7 @@ function recurringFields(tpl, monthKey) {
   const money = d.moneda === 'CAD'
     ? { valor: Math.round(Number(d.montoOriginal) * rate), moneda: 'CAD', montoOriginal: Number(d.montoOriginal), tasa: rate }
     : { valor: Math.round(Number(d.valor)), moneda: 'COP' };
-  const base = { ...money, fecha: recurringDueDate(tpl, monthKey), concepto: d.concepto, nota: d.nota || '', recurrenteId: tpl.id };
+  const base = { ...money, fecha: recurringDueDate(tpl, monthKey), concepto: d.concepto, nota: d.nota || '', recurrenteId: tpl.id, ...(d.cuenta ? { cuenta: d.cuenta } : {}) };
   return tpl.type === 'gasto'
     ? { ...base, macroCategoria: d.macroCategoria, subcategoria: d.subcategoria, medioPago: d.medioPago }
     : { ...base, tipoIngreso: d.tipoIngreso };
@@ -2704,6 +3104,7 @@ function initForm() {
   document.getElementById('expenseAmountInput')?.addEventListener('input', renderFormCurrency);
   document.getElementById('regDateInput')?.addEventListener('change', renderFormRecurrence);
   document.getElementById('regRecurrente')?.addEventListener('change', renderFormRecurrence);
+  document.getElementById('regCuentaSelect')?.addEventListener('change', e => { form.cuenta = e.target.value; renderFormAccount(); });
   resetForm();
 }
 
@@ -2712,6 +3113,7 @@ function resetForm() {
   form.fromTemplate = null;
   form.moneda = state.data.registroMoneda;
   form.medio = state.data.registroMedio;
+  form.cuenta = state.account(state.data.registroCuenta) ? state.account(state.data.registroCuenta).nombre : '';
   const amt = document.getElementById('expenseAmountInput');
   const nota = document.getElementById('expenseNote');
   const date = document.getElementById('regDateInput');
@@ -2744,7 +3146,27 @@ function setFormMedio(medio) {
   renderFormMedio();
 }
 
+// Selector de cuenta (gastos e ingresos), agrupado por titular
+function renderFormAccount() {
+  const sel = document.getElementById('regCuentaSelect');
+  if (!sel) return;
+  const accounts = state.accounts();
+  // Un registro antiguo con una cuenta que ya no está activa la sigue mostrando
+  if (form.cuenta && !accounts.some(a => a.nombre === form.cuenta) && state.account(form.cuenta)) accounts.push(state.account(form.cuenta));
+  const groups = {};
+  accounts.forEach(a => { (groups[a.titular || 'Compartidas'] = groups[a.titular || 'Compartidas'] || []).push(a); });
+  sel.innerHTML = `<option value="">Elige la cuenta…</option>` + Object.entries(groups).map(([owner, list]) =>
+    `<optgroup label="${escapeHtml(owner)}">${list.map(a => `<option value="${escapeHtml(a.nombre)}">${escapeHtml(a.nombre)}</option>`).join('')}</optgroup>`).join('');
+  sel.value = form.cuenta || '';
+  const acc = state.account(form.cuenta);
+  setText('regCuentaHint', !acc ? 'Elige de qué cuenta sale el gasto o a cuál entra el ingreso.'
+    : acc.tipo === 'credito'
+      ? (form.type === 'gasto' ? 'Suma a la deuda de la tarjeta. Para pagarla usa Transferir en Cuentas (no lo registres como gasto).' : 'Un ingreso a una tarjeta de crédito reduce su deuda (p. ej. un reembolso).')
+      : `Saldo actual: ${formatCurrency(state.accountBalance(acc.nombre), 'CAD')}`);
+}
+
 function renderFormMedio() {
+  renderFormAccount();
   const cur = form.medio || state.data.registroMedio;
   document.querySelectorAll('#medioPagoSegment [data-medio]').forEach(btn => {
     const active = btn.dataset.medio === cur;
@@ -2933,6 +3355,7 @@ function startEdit(type, id) {
   }
   form.moneda = item.moneda === 'CAD' ? 'CAD' : 'COP';
   form.medio = MEDIOS_PAGO[item.medioPago] ? item.medioPago : state.data.registroMedio;
+  form.cuenta = state.account(item.cuenta)?.nombre || '';
   switchView('registrar');
 
   document.getElementById('expenseAmountInput').value = item.moneda === 'CAD' ? item.montoOriginal : item.valor;
@@ -2953,6 +3376,7 @@ function startFromTemplate(tplId, monthKey) {
   form.fromTemplate = { tplId, monthKey };
   form.moneda = d.moneda === 'CAD' ? 'CAD' : 'COP';
   form.medio = MEDIOS_PAGO[d.medioPago] ? d.medioPago : state.data.registroMedio;
+  form.cuenta = state.account(d.cuenta)?.nombre || form.cuenta;
   if (tpl.type === 'gasto') {
     form.macro = d.macroCategoria;
     form.sub = d.subcategoria;
@@ -2978,6 +3402,15 @@ async function saveForm() {
     return;
   }
 
+  const acc = state.account(document.getElementById('regCuentaSelect')?.value || form.cuenta);
+  if (!acc) {
+    showToast('Elige la cuenta del movimiento', 'error');
+    document.getElementById('regCuentaSelect')?.focus();
+    return;
+  }
+  form.cuenta = acc.nombre;
+  state.data.registroCuenta = acc.nombre; // se recuerda para el próximo registro
+
   const nota = (document.getElementById('expenseNote')?.value || '').trim();
   const dateVal = document.getElementById('regDateInput')?.value;
   const fecha = isIsoDate(dateVal) ? dateVal : localISODate();
@@ -2989,8 +3422,8 @@ async function saveForm() {
     : { valor: Math.round(val), moneda: 'COP', montoOriginal: undefined, tasa: undefined };
 
   const fields = form.type === 'gasto'
-    ? { ...money, fecha, macroCategoria: form.macro, subcategoria: form.sub, concepto: document.getElementById('regConceptoSelect')?.value || form.concepto, nota, medioPago: form.medio }
-    : { ...money, fecha, tipoIngreso: form.tipoIngreso, concepto: document.getElementById('regConceptoIngresoSelect')?.value || form.conceptoIngreso, nota };
+    ? { ...money, fecha, macroCategoria: form.macro, subcategoria: form.sub, concepto: document.getElementById('regConceptoSelect')?.value || form.concepto, nota, medioPago: acc.tipo, cuenta: acc.nombre }
+    : { ...money, fecha, tipoIngreso: form.tipoIngreso, concepto: document.getElementById('regConceptoIngresoSelect')?.value || form.conceptoIngreso, nota, cuenta: acc.nombre };
 
   const label = form.type === 'gasto' ? 'Gasto' : 'Ingreso';
   const wantsRecurring = document.getElementById('regRecurrente')?.checked;

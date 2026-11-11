@@ -1,5 +1,5 @@
 /**
- * GastosApp ⇄ Google Sheets (BDGastosApp) — protocolo v7 (presupuestos y recurrentes compartidos entre dispositivos)
+ * GastosApp ⇄ Google Sheets (BDGastosApp) — protocolo v8 (cuentas, saldos y transferencias)
  *
  * Pega este archivo en Extensiones → Apps Script de tu hoja y publícalo como
  * aplicación web (Ejecutar como: tú · Acceso: cualquier usuario).
@@ -7,7 +7,7 @@
  * La app envía POST con cuerpo JSON en text/plain (así el navegador no hace
  * preflight CORS y puede leer la respuesta). Acciones:
  *   ping                → { ok, version }
- *   list                → { ok, version, valorCurrency, gastos, ingresos, catalog, budgets, recurring }
+ *   list                → { ok, version, valorCurrency, gastos, ingresos, transferencias, catalog, budgets, recurring, accounts }
  *   catalog             → { ok, version, catalog }
  *   upsert (o create)   → crea la fila o la actualiza si el id ya existe
  *   update              → igual que upsert
@@ -15,6 +15,8 @@
  *   setBudgets          → reemplaza la pestaña Presupuestos ({ currency, budgets: { macro: límite } })
  *   upsertRecurring     → crea o actualiza recurrentes por id ({ items: [...] })
  *   deleteRecurring     → borra recurrentes por id ({ ids: [...] })
+ *   setAccounts         → reemplaza la pestaña Cuentas ({ accounts: [{ nombre, tipo, titular, saldo, fecha, activa }] })
+ *   upsert/delete con type 'transferencia' → pestaña Transferencias (entre cuentas)
  *
  * Funciona con rangos normales o con Tablas de Google Sheets: cada columna se
  * ubica por su encabezado (fila 1), así que puedes reordenarlas o agregar otras.
@@ -36,6 +38,10 @@
  * Desde la v7, los presupuestos (pestaña Presupuestos) y los movimientos recurrentes
  * (pestaña Recurrentes) también viven en la hoja: así son los mismos en todos los
  * dispositivos. Las pestañas se crean solas la primera vez que la app los envía.
+ *
+ * Desde la v8: pestaña Cuentas (tarjetas débito/crédito y efectivo con su saldo inicial),
+ * columna Cuenta en gastos, ingresos y recurrentes, y pestaña Transferencias (pagos de
+ * tarjeta y movimientos entre cuentas, que no cuentan como gasto ni ingreso).
  */
 
 const CONFIG = {
@@ -62,6 +68,17 @@ const CONFIG = {
         ['valor', 'Valor (CAD)', ['valor', 'valor cad', 'monto', 'monto cad']],
         ['tipoIngreso', 'Tipo de ingreso', ['tipo de ingreso', 'tipo', 'categoria']],
         ['concepto', 'Concepto de Ingreso', ['concepto de ingreso', 'concepto']],
+        ['nota', 'Nota', ['nota', 'notas', 'descripcion']]
+      ]
+    },
+    // v8: dinero que pasa de una cuenta a otra (p. ej. pagar la tarjeta de crédito)
+    transferencia: {
+      name: 'Transferencias',
+      columns: [
+        ['fecha', 'Fecha', ['fecha']],
+        ['valor', 'Valor (CAD)', ['valor', 'valor cad', 'monto', 'monto cad']],
+        ['cuentaOrigen', 'Cuenta origen', ['cuenta origen', 'origen', 'desde']],
+        ['cuentaDestino', 'Cuenta destino', ['cuenta destino', 'destino', 'hacia']],
         ['nota', 'Nota', ['nota', 'notas', 'descripcion']]
       ]
     }
@@ -97,21 +114,45 @@ const CONFIG = {
         ['dia', 'Día', ['dia', 'dia del mes']],
         ['modo', 'Modo', ['modo']],
         ['activo', 'Activo', ['activo']],
-        ['ultimo', 'Último mes', ['ultimo mes', 'ultimo']]
+        ['ultimo', 'Último mes', ['ultimo mes', 'ultimo']],
+        ['cuenta', 'Cuenta', ['cuenta']]
+      ]
+    },
+    // v8: cuentas con su saldo inicial (saldo al empezar el día de "Fecha del saldo", en CAD)
+    accounts: {
+      name: 'Cuentas',
+      key: 'nombre',
+      columns: [
+        ['nombre', 'Cuenta', ['cuenta', 'nombre']],
+        ['tipo', 'Tipo', ['tipo']],
+        ['titular', 'Titular', ['titular', 'dueno', 'duena']],
+        ['saldo', 'Saldo inicial (CAD)', ['saldo inicial', 'saldo']],
+        ['fecha', 'Fecha del saldo', ['fecha del saldo', 'fecha']],
+        ['activa', 'Activa', ['activa', 'activo']]
       ]
     }
   }
 };
 
-const VERSION = 7;
+const VERSION = 8;
 // Columnas comunes que se ubican por su encabezado: [campo, encabezado, sinónimos]
 const EXTRA_COLUMNS = [
   ['id', 'ID', ['id']],
   ['moneda', 'Moneda', ['moneda']],
   ['montoOriginal', 'Monto original', ['monto original']],
   ['tasa', 'Tasa CAD→COP', ['tasa cad cop', 'tasa']],
-  ['medioPago', 'Medio de pago', ['medio de pago', 'metodo de pago', 'forma de pago']]
+  ['medioPago', 'Medio de pago', ['medio de pago', 'metodo de pago', 'forma de pago']],
+  ['cuenta', 'Cuenta', ['cuenta']]
 ];
+
+// Columnas comunes de cada tipo: el medio de pago solo aplica a gastos; las transferencias
+// no llevan medio de pago ni cuenta (tienen origen y destino)
+function extrasFor_(type) {
+  return EXTRA_COLUMNS.filter(([f]) => {
+    if (type === 'transferencia') return f !== 'medioPago' && f !== 'cuenta';
+    return type === 'gasto' || f !== 'medioPago';
+  });
+}
 
 function doGet(e) {
   // Compatibilidad: sin clave configurada, GET devuelve el listado
@@ -142,7 +183,7 @@ function handle_(body) {
       case 'ping':
         return json_({ ok: true, version: VERSION });
       case 'list':
-        return json_({ ok: true, version: VERSION, valorCurrency: 'CAD', gastos: list_('gasto', body), ingresos: list_('ingreso', body), catalog: catalog_(), budgets: listBudgets_(), recurring: listRecurring_() });
+        return json_({ ok: true, version: VERSION, valorCurrency: 'CAD', gastos: list_('gasto', body), ingresos: list_('ingreso', body), transferencias: listTransfers_(body), catalog: catalog_(), budgets: listBudgets_(), recurring: listRecurring_(), accounts: listAccounts_() });
       case 'catalog':
         return json_({ ok: true, version: VERSION, catalog: catalog_() });
       case 'addCatalog':
@@ -159,6 +200,8 @@ function handle_(body) {
         return json_(upsertRecurring_(body));
       case 'deleteRecurring':
         return json_(deleteRecurring_(body));
+      case 'setAccounts':
+        return json_(setAccounts_(body));
       default:
         return json_({ ok: false, error: 'Acción desconocida: ' + action });
     }
@@ -230,13 +273,12 @@ function sheet_(type) {
     isNew = true;
   }
   if (sh.getLastRow() === 0) {
-    sh.appendRow(conf.columns.map(c => c[1]).concat(EXTRA_COLUMNS.filter(([f]) => type === 'gasto' || f !== 'medioPago').map(c => c[1])));
+    sh.appendRow(conf.columns.map(c => c[1]).concat(extrasFor_(type).map(c => c[1])));
     isNew = true;
   }
   const header = headerRow_(sh);
   const cols = {};
-  // El medio de pago solo aplica a gastos
-  const extras = EXTRA_COLUMNS.filter(([field]) => type === 'gasto' || field !== 'medioPago');
+  const extras = extrasFor_(type);
   conf.columns.concat(extras).forEach(([field, title, synonyms]) => {
     let c = findColumn_(header, synonyms);
     if (c < 0) {
@@ -373,8 +415,14 @@ function list_(type, body) {
     rec.fecha = formatDate_(rec.fecha, tz);
     rec.concepto = String(rec.concepto || '');
     rec.nota = String(rec.nota || '');
-    const medio = String(get('medioPago') || '').trim();
+    const medio = cols.medioPago ? String(get('medioPago') || '').trim() : '';
     if (medio) rec.medioPago = medio;
+    const cuenta = cols.cuenta ? String(get('cuenta') || '').trim() : '';
+    if (cuenta) rec.cuenta = cuenta;
+    if (type === 'transferencia') {
+      rec.cuentaOrigen = String(rec.cuentaOrigen || '').trim();
+      rec.cuentaDestino = String(rec.cuentaDestino || '').trim();
+    }
 
     let moneda = String(get('moneda') || '').trim().toUpperCase();
     let original = toNumber_(get('montoOriginal'));
@@ -442,7 +490,9 @@ function upsert_(body) {
   const writes = conf.columns.map(([field, title]) => [cols[field], rec[field], title]);
   writes.push([cols.id, id, 'ID'], [cols.moneda, moneda, 'Moneda'], [cols.montoOriginal, original, 'Monto original'], [cols.tasa, tasa, 'Tasa CAD→COP']);
   // Medio de pago: solo si la app lo envía (las versiones antiguas no lo hacen)
-  if (body.paymentType !== undefined) writes.push([cols.medioPago, String(body.paymentType || ''), 'Medio de pago']);
+  if (body.paymentType !== undefined && cols.medioPago) writes.push([cols.medioPago, String(body.paymentType || ''), 'Medio de pago']);
+  // Cuenta (v8): solo si la app la envía
+  if (body.account !== undefined && cols.cuenta) writes.push([cols.cuenta, String(body.account || ''), 'Cuenta']);
 
   writeRow_(sh, row, writes, isNew);
   return { ok: true, action: 'upsert', id: id, row: row, valorCAD: inCad ? rec.valor : undefined };
@@ -567,6 +617,8 @@ function listRecurring_() {
       ultimo: formatMonth_(r.get('ultimo'), tz)
     };
     if (medio) rec.medioPago = medio;
+    const cuenta = ctx.cols.cuenta > 0 ? String(r.get('cuenta') || '').trim() : '';
+    if (cuenta) rec.cuenta = cuenta;
     out.push(rec);
   });
   return out;
@@ -598,7 +650,8 @@ function upsertRecurring_(body) {
       [cols.modo, it.modo === 'auto' ? 'Automático' : 'Proponer', 'Modo'],
       [cols.activo, it.activo !== false, 'Activo'],
       // Con "'" Sheets lo guarda como texto (si no, convierte "2026-10" en una fecha)
-      [cols.ultimo, it.ultimo ? "'" + String(it.ultimo) : '', 'Último mes']
+      [cols.ultimo, it.ultimo ? "'" + String(it.ultimo) : '', 'Último mes'],
+      [cols.cuenta, String(it.cuenta || ''), 'Cuenta']
     ], isNew);
     ids.push(id);
   });
@@ -613,6 +666,75 @@ function deleteRecurring_(body) {
   const rows = configRows_(ctx).filter(r => ids.indexOf(String(r.get('id'))) >= 0).map(r => r.row).sort((a, b) => b - a);
   rows.forEach(r => ctx.sh.deleteRow(r));
   return { ok: true, action: 'deleteRecurring', ids: ids, deleted: rows.length };
+}
+
+// ---------- Cuentas y transferencias (v8) ----------
+
+// Las transferencias se leen solo si la pestaña existe (leer no crea pestañas)
+function listTransfers_(body) {
+  if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEETS.transferencia.name)) return [];
+  return list_('transferencia', body);
+}
+
+function normAccountType_(v) {
+  const t = normHeader_(v);
+  if (/credito|tc/.test(t)) return 'credito';
+  if (/efectivo/.test(t)) return 'efectivo';
+  return 'debito';
+}
+
+const ACCOUNT_TYPE_LABELS = { debito: 'Débito', credito: 'Crédito', efectivo: 'Efectivo' };
+
+// [{ nombre, tipo, titular, saldo, fecha, activa }]; [] si la pestaña no existe o está vacía
+function listAccounts_() {
+  const ctx = configSheet_('accounts', false);
+  if (!ctx || ctx.cols.nombre < 0) return [];
+  const tz = Session.getScriptTimeZone();
+  return configRows_(ctx)
+    .map(r => ({
+      nombre: String(r.get('nombre') || '').trim(),
+      tipo: normAccountType_(r.get('tipo')),
+      titular: String(r.get('titular') || '').trim(),
+      saldo: toNumber_(r.get('saldo')),
+      fecha: formatDate_(typeof r.get('fecha') === 'string' ? String(r.get('fecha')).replace(/^'/, '') : r.get('fecha'), tz),
+      activa: toBool_(r.get('activa'), true)
+    }))
+    .filter(a => a.nombre);
+}
+
+// Reemplaza las cuentas: actualiza la fila de cada una (por nombre), agrega las nuevas y borra las que ya no están
+function setAccounts_(body) {
+  const accounts = Array.isArray(body.accounts) ? body.accounts.filter(a => a && String(a.nombre || '').trim()) : null;
+  if (!accounts) return { ok: false, error: 'Faltan las cuentas' };
+  const ctx = configSheet_('accounts', true);
+  const { sh, cols } = ctx;
+  const key = v => String(v || '').trim().toLowerCase();
+  const byKey = {};
+  accounts.forEach(a => { byKey[key(a.nombre)] = a; });
+  const writesFor = a => [
+    [cols.nombre, String(a.nombre).trim(), 'Cuenta'],
+    [cols.tipo, ACCOUNT_TYPE_LABELS[normAccountType_(a.tipo)], 'Tipo'],
+    [cols.titular, String(a.titular || ''), 'Titular'],
+    [cols.saldo, round2_(toNumber_(a.saldo)), 'Saldo inicial (CAD)'],
+    // Con "'" Sheets lo guarda como texto (sin convertirlo a otra zona horaria)
+    [cols.fecha, /^\d{4}-\d{2}-\d{2}$/.test(String(a.fecha || '')) ? "'" + a.fecha : '', 'Fecha del saldo'],
+    [cols.activa, a.activa !== false, 'Activa']
+  ];
+  const seen = {};
+  const remove = [];
+  configRows_(ctx).forEach(r => {
+    const k = key(r.get('nombre'));
+    if (!k) return;
+    if (!byKey[k] || seen[k]) { remove.push(r.row); return; } // ya no existe o está repetida
+    seen[k] = true;
+    writeRow_(sh, r.row, writesFor(byKey[k]), false);
+  });
+  remove.sort((a, b) => b - a).forEach(r => sh.deleteRow(r));
+  accounts.filter(a => !seen[key(a.nombre)]).forEach(a => {
+    seen[key(a.nombre)] = true;
+    writeRow_(sh, lastDataRow_(ctx) + 1, writesFor(a), true);
+  });
+  return { ok: true, action: 'setAccounts', count: accounts.length };
 }
 
 // ---------- Catálogo ----------
@@ -701,7 +823,8 @@ function onOpen() {
  *  - Fija la fila de encabezados y da formato de fecha y número.
  *  - Pone listas desplegables (en modo "advertencia") donde no hay ninguna:
  *    categorías desde BDGastos/BDIngresos y medio de pago.
- *  - Crea las pestañas Presupuestos y Recurrentes (v7), que la app llena al sincronizar.
+ *  - Crea las pestañas Presupuestos, Recurrentes (v7), Cuentas y Transferencias (v8),
+ *    que la app llena al sincronizar.
  *  - Crea la pestaña Resumen (gastos por mes y macro-categoría, ingresos por mes).
  * Se puede ejecutar varias veces: lo que ya está bien no se toca.
  */
@@ -757,8 +880,8 @@ function prepararHoja() {
     }
   });
 
-  // Presupuestos y recurrentes compartidos entre dispositivos (v7)
-  ['budgets', 'recurring'].forEach(kind => {
+  // Presupuestos, recurrentes y cuentas compartidos entre dispositivos (v7 y v8)
+  ['budgets', 'recurring', 'accounts'].forEach(kind => {
     const name = CONFIG.CONFIG_SHEETS[kind].name;
     const existed = !!ss.getSheetByName(name);
     const before = existed ? headerRow_(ss.getSheetByName(name)).length : 0;
@@ -766,6 +889,13 @@ function prepararHoja() {
     if (!existed) notas.push(`Creada la pestaña ${name} (la app la llena al sincronizar)`);
     else if (before > 1 && ctx.width > before) notas.push(`${name}: agregadas ${ctx.width - before} columna(s) al final`);
   });
+
+  // Transferencias entre cuentas (v8)
+  if (!ss.getSheetByName(CONFIG.SHEETS.transferencia.name)) {
+    const t = sheet_('transferencia');
+    safe_(() => t.sh.setFrozenRows(1));
+    notas.push('Creada la pestaña ' + CONFIG.SHEETS.transferencia.name);
+  }
 
   createSummary_(ss, notas);
 
@@ -874,6 +1004,9 @@ function fromPayload_(type, b) {
   if (type === 'gasto') {
     common.macroCategoria = b.macroCategory || b.macroCategoria || '';
     common.subcategoria = b.subcategory || b.subcategoria || '';
+  } else if (type === 'transferencia') {
+    common.cuentaOrigen = b.fromAccount || b.cuentaOrigen || '';
+    common.cuentaDestino = b.toAccount || b.cuentaDestino || '';
   } else {
     common.tipoIngreso = b.incomeType || b.tipoIngreso || '';
   }

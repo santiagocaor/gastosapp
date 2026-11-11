@@ -18,9 +18,15 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Gastos por macro-categoría → subcategoría → concepto (Necesidades, Deseos, Deudas, Ahorros, Inversiones).
   - Ingresos por tipo → concepto.
   - **Monto en CAD o COP** (CAD por defecto) con la equivalencia en la otra moneda.
-  - **Medio de pago** de cada gasto: Débito, Efectivo o Tarjeta de crédito (se recuerda el último usado).
+  - **Cuenta** de cada gasto e ingreso (obligatoria): la tarjeta débito o crédito, o Efectivo, agrupadas por titular (se recuerda la última usada). El medio de pago (Débito, Efectivo o Tarjeta de crédito) sale de la cuenta.
   - **Fecha editable** (para registrar movimientos de días anteriores) y nota opcional.
   - **Repetir cada mes**: convierte el movimiento en recurrente.
+- 💳 **Cuentas**
+  - Las tarjetas de Lina y Santiago (Nu débito y crédito, Royal Bank, Caja Social, Wealthsimple, Scotiabank, Canadian Tire) y Efectivo, agrupadas por titular, con su saldo en CAD.
+  - Arriba: patrimonio (disponible en débito y efectivo menos la deuda de las tarjetas de crédito).
+  - **Saldo inicial**: al abrir una cuenta escribes su saldo (o lo que debes, en crédito) al empezar un día; desde ahí suman los ingresos y restan los gastos registrados con esa cuenta. En crédito, los gastos aumentan la deuda.
+  - **Transferir o pagar tarjeta**: mueve dinero entre cuentas sin contarlo como gasto ni ingreso (p. ej. pagar la tarjeta de crédito desde la débito). Se borra desde la lista de movimientos de la cuenta.
+  - Cada cuenta muestra sus movimientos desde el saldo inicial y un acceso a *Movimientos* filtrado por esa cuenta. Los registros anteriores a las cuentas no tienen cuenta y no cuentan en los saldos hasta que los edites y elijas una.
 - 🔁 **Movimientos recurrentes** (arriendo, nómina, suscripciones, cuota de la TC)
   - 🔔 *Proponer*: cada mes aparece en Inicio para **Registrar**, revisarlo (✏️) u **Omitir**.
   - ⚡ *Automático*: se registra solo el día indicado (si no abriste la app, se ponen al día los meses vencidos, hasta 12).
@@ -39,7 +45,8 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
   - Donut por categoría, barras de ingresos vs. gastos de los últimos 6 meses y top 5 de conceptos.
 - 🧾 **Movimientos**
   - Todo el historial con buscador (concepto, nota o categoría, sin importar tildes).
-  - Filtros por tipo (gastos/ingresos), categoría, medio de pago, **concepto** (se ajusta a la categoría elegida) y periodo (mes elegido o todo), con totales de lo filtrado.
+  - Filtros por tipo (gastos/ingresos), categoría, **cuenta**, medio de pago, **concepto** (se ajusta a la categoría elegida) y periodo (mes elegido o todo), con totales de lo filtrado.
+  - Cada movimiento muestra su fecha bajo el monto y la cuenta con que se hizo.
   - Agrupado por mes con el neto de cada uno; toca un movimiento para editarlo.
 - 💰 **Presupuesto**
   - Límites mensuales editables en línea por macro-categoría, estado de cada uno y proyección de cierre de mes.
@@ -58,7 +65,7 @@ Diseño concebido con **Google Stitch** (`stitch.withgoogle.com`) y desarrollado
 
 ## 🔄 Sincronización con Google Sheets
 
-La sincronización es **en ambos sentidos**: lo que crees, edites o borres en la app llega a la hoja, y lo que cambies en la hoja (o desde otro dispositivo) aparece en la app. Desde el script **v7** esto incluye los **presupuestos** y los **movimientos recurrentes**.
+La sincronización es **en ambos sentidos**: lo que crees, edites o borres en la app llega a la hoja, y lo que cambies en la hoja (o desde otro dispositivo) aparece en la app. Desde el script **v7** esto incluye los **presupuestos** y los **movimientos recurrentes**, y desde la **v8** las **cuentas** (con su saldo inicial), la cuenta de cada movimiento y las **transferencias**.
 
 ### Instalar el script
 
@@ -87,12 +94,12 @@ Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del sc
 - **Tus categorías salen de la hoja:** la app lee **BDGastos** (Macro-categoría · Subcategoría · Concepto) y **BDIngresos** (Tipo de ingreso · Concepto). Lo que agregues o borres ahí aparece en la app al sincronizar; las macro-categorías nuevas reciben su ícono y color. El botón *+ Concepto* de la app también agrega la fila a BDGastos.
 - **Listas desplegables:** si la hoja rechaza un valor (por ejemplo una categoría que borraste), la fila no queda a medias, el registro queda marcado en rojo y la campana dice qué valor y en qué columna; al editarlo a uno válido se envía.
 
-- **Tarjeta de crédito:** cada compra con la TC se registra como gasto en su categoría el día de la compra, con medio de pago *Tarjeta de crédito*. El pago de la tarjeta a fin de mes **no** es un gasto (solo mueve dinero de la cuenta a la tarjeta); en *Deudas → Tarjetas de crédito → Intereses y cargos TC* registra solo intereses, cuota de manejo o cargos del banco. En *Movimientos* filtra por “Tarjeta de crédito” para ver cuánto llevas cargado.
-- **La hoja está en CAD.** La columna **Valor (CAD)** guarda el monto en dólares canadienses; al final de cada pestaña se agregan **ID**, **Moneda** (en qué moneda se registró), **Monto original** (en esa moneda), **Tasa CAD→COP** y **Medio de pago** (se buscan por encabezado, así que puedes moverlas).
+- **Tarjeta de crédito:** cada compra con la TC se registra como gasto en su categoría el día de la compra, con la cuenta de la tarjeta. El pago de la tarjeta **no** es un gasto: regístralo en *Cuentas → Pagar tarjeta* (una transferencia de la débito a la tarjeta). En *Deudas → Tarjetas de crédito → Intereses y cargos TC* registra solo intereses, cuota de manejo o cargos del banco. En *Movimientos* filtra por la cuenta de la tarjeta para ver cuánto llevas cargado.
+- **La hoja está en CAD.** La columna **Valor (CAD)** guarda el monto en dólares canadienses; al final de cada pestaña se agregan **ID**, **Moneda** (en qué moneda se registró), **Monto original** (en esa moneda), **Tasa CAD→COP**, **Medio de pago** y **Cuenta** (se buscan por encabezado, así que puedes moverlas).
 - **Migración automática (una vez):** al sincronizar por primera vez con el script v4, las filas que estaban en COP se convierten a CAD con la tasa del día; su monto exacto en COP queda en *Monto original*. Las registradas en CAD recuperan su monto original exacto.
 - **Puedes editar la hoja a mano:** *Valor (CAD)* manda. Si lo cambias, la app ajusta el monto original; una fila nueva escrita a mano se toma como CAD y recibe su id.
 - Hacia la app el script entrega el valor en COP y en CAD, así una versión vieja de la app abierta en otro dispositivo no muestra cifras erradas.
-- Con un script anterior la app sigue funcionando (con un script anterior a la v6, con su catálogo propio y conservando moneda y medio de pago en el dispositivo; con la v6, con presupuestos y recurrentes solo en el dispositivo), y la campana avisa para actualizarlo a la v7.
+- Con un script anterior la app sigue funcionando (con un script anterior a la v6, con su catálogo propio y conservando moneda y medio de pago en el dispositivo; con la v6, con presupuestos y recurrentes solo en el dispositivo), con la v7, con la cuenta de cada movimiento, los saldos iniciales y las transferencias solo en el dispositivo), y la campana avisa para actualizarlo a la v8.
 - La app envía `POST` con JSON en `text/plain` (sin preflight CORS), lee la respuesta y solo marca un cambio como enviado cuando el script confirma `ok`.
 - Sin conexión, los cambios quedan **pendientes** (☁️ tachado) y se envían solos al volver la red o al abrir la app; también con *Reenviar pendientes*.
 - La app se sincroniza sola al abrirse y al volver a ella (como máximo cada 2 minutos), o con *Sincronizar ahora*.
@@ -110,7 +117,14 @@ Opcional: pon una clave en `CONFIG.TOKEN` y escríbela en el campo *Clave del sc
 - **Primera sincronización con la v7:** si la pestaña Presupuestos está vacía, se suben los límites de la app (si ya tiene datos, se toman los de la hoja). Los recurrentes de cada dispositivo se **suman** a los de la hoja, así no se pierde ninguno; si quedó alguno repetido, bórralo en un dispositivo y desaparece en los demás.
 - Si vacías a mano la pestaña Presupuestos, el siguiente dispositivo que sincronice la vuelve a llenar con sus límites.
 
-Acciones del script (`POST`): `ping`, `list` (registros, catálogo, presupuestos y recurrentes), `catalog`, `addCatalog`, `upsert` (crea o actualiza por `id`), `delete`, `setBudgets`, `upsertRecurring` y `deleteRecurring`. El `GET` sin clave devuelve el listado.
+### Cuentas y transferencias en la hoja (v8)
+
+- **Cuentas** (`Cuenta | Tipo | Titular | Saldo inicial (CAD) | Fecha del saldo | Activa`): una fila por cuenta. *Tipo* es `Débito`, `Crédito` o `Efectivo`; el saldo inicial es al empezar el día de *Fecha del saldo* (en crédito, lo que se debe). Con *Activa* = `No` deja de aparecer al registrar. La primera vez que sincroniza un dispositivo con la v8 sube sus cuentas; después la hoja manda, salvo un cambio aún sin enviar (lo último que llega gana, como los presupuestos).
+- **Transferencias** (`Fecha | Valor (CAD) | Cuenta origen | Cuenta destino | Nota | ID | …`): pagos de tarjeta y movimientos entre cuentas. No cuentan como gasto ni ingreso.
+- **Cuenta** se agrega al final de *Registro de Gastos*, *Registro de Ingresos* y *Recurrentes*. Los nombres deben coincidir con la pestaña Cuentas.
+- Con un script v7 la app guarda las transferencias y los saldos solo en el dispositivo y los envía al actualizar a la v8.
+
+Acciones del script (`POST`): `ping`, `list` (registros, transferencias, catálogo, presupuestos, recurrentes y cuentas), `catalog`, `addCatalog`, `upsert` (crea o actualiza por `id`; `type` gasto, ingreso o transferencia), `delete`, `setBudgets`, `upsertRecurring`, `deleteRecurring` y `setAccounts`. El `GET` sin clave devuelve el listado.
 
 ---
 
